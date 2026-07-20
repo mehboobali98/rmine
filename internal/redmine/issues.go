@@ -28,6 +28,7 @@ type IssueListFilter struct {
 	StatusID      string
 	AssignedTo    string
 	TrackerID     string
+	Subject       string // substring match against the issue subject
 	UpdatedAfter  string // YYYY-MM-DD
 	UpdatedBefore string // YYYY-MM-DD
 	Limit         int    // 0 means "use Redmine's default page size"
@@ -43,26 +44,85 @@ type issueResponse struct {
 	Issue Issue `json:"issue"`
 }
 
+// buildAdvancedIssueFilter translates IssueListFilter into Redmine's
+// f[]/op[field]/v[field][] advanced filter syntax, the only form that
+// supports the subject "contains" operator.
+func buildAdvancedIssueFilter(f IssueListFilter) url.Values {
+	q := url.Values{}
+	addField := func(field, op string, values ...string) {
+		q.Add("f[]", field)
+		q.Set("op["+field+"]", op)
+		for _, v := range values {
+			q.Add("v["+field+"][]", v)
+		}
+	}
+
+	if f.ProjectID != "" {
+		addField("project_id", "=", f.ProjectID)
+	}
+	if f.TrackerID != "" {
+		addField("tracker_id", "=", f.TrackerID)
+	}
+	if f.AssignedTo != "" {
+		addField("assigned_to_id", "=", f.AssignedTo)
+	}
+	if f.StatusID != "" {
+		switch f.StatusID {
+		case "open":
+			addField("status_id", "o")
+		case "closed":
+			addField("status_id", "c")
+		case "*":
+			addField("status_id", "*")
+		default:
+			addField("status_id", "=", f.StatusID)
+		}
+	}
+	switch {
+	case f.UpdatedAfter != "" && f.UpdatedBefore != "":
+		addField("updated_on", "><", f.UpdatedAfter, f.UpdatedBefore)
+	case f.UpdatedAfter != "":
+		addField("updated_on", ">=", f.UpdatedAfter)
+	case f.UpdatedBefore != "":
+		addField("updated_on", "<=", f.UpdatedBefore)
+	}
+	if f.Subject != "" {
+		addField("subject", "~", f.Subject)
+	}
+	return q
+}
+
 // ListIssues returns issues matching the filter, paging through results when
 // All is set or the requested Limit exceeds Redmine's per-page cap.
 func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 	const pageSize = 100
 
-	base := url.Values{}
-	if f.ProjectID != "" {
-		base.Set("project_id", f.ProjectID)
-	}
-	if f.StatusID != "" {
-		base.Set("status_id", f.StatusID)
-	}
-	if f.AssignedTo != "" {
-		base.Set("assigned_to_id", f.AssignedTo)
-	}
-	if f.TrackerID != "" {
-		base.Set("tracker_id", f.TrackerID)
-	}
-	if f.UpdatedAfter != "" || f.UpdatedBefore != "" {
-		base.Set("updated_on", dateRangeFilter(f.UpdatedAfter, f.UpdatedBefore))
+	// Redmine's issues.json only reads params[:f] (the advanced filter
+	// array) OR the simple field params (project_id=, status_id=, ...) —
+	// never both. A subject search needs the advanced form (op "~" for
+	// "contains" isn't expressible as a simple param), so once Subject is
+	// set every other active filter has to move to the advanced form too,
+	// or it would be silently ignored.
+	var base url.Values
+	if f.Subject != "" {
+		base = buildAdvancedIssueFilter(f)
+	} else {
+		base = url.Values{}
+		if f.ProjectID != "" {
+			base.Set("project_id", f.ProjectID)
+		}
+		if f.StatusID != "" {
+			base.Set("status_id", f.StatusID)
+		}
+		if f.AssignedTo != "" {
+			base.Set("assigned_to_id", f.AssignedTo)
+		}
+		if f.TrackerID != "" {
+			base.Set("tracker_id", f.TrackerID)
+		}
+		if f.UpdatedAfter != "" || f.UpdatedBefore != "" {
+			base.Set("updated_on", dateRangeFilter(f.UpdatedAfter, f.UpdatedBefore))
+		}
 	}
 
 	want := f.Limit
