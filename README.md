@@ -10,6 +10,10 @@ Download a binary from the [Releases](https://github.com/mehboobali98/rdm/releas
 go install github.com/mehboobali98/rdm/cmd/rdm@latest
 ```
 
+`go install` puts the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`) — make sure that's on your `PATH`.
+
+If you use oh-my-zsh's `rails` plugin, note that it aliases `rdm` to `rails db:migrate`, which will shadow this binary. Run `unalias rdm` (or remove `rails` from your `plugins=(...)` list) to use this CLI instead.
+
 ## Getting started
 
 ```sh
