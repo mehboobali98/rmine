@@ -24,12 +24,14 @@ type Issue struct {
 
 // IssueListFilter narrows a `rdm issue list` query. Empty fields are omitted.
 type IssueListFilter struct {
-	ProjectID  string
-	StatusID   string
-	AssignedTo string
-	TrackerID  string
-	Limit      int  // 0 means "use Redmine's default page size"
-	All        bool // ignore Limit and fetch every matching issue
+	ProjectID     string
+	StatusID      string
+	AssignedTo    string
+	TrackerID     string
+	UpdatedAfter  string // YYYY-MM-DD
+	UpdatedBefore string // YYYY-MM-DD
+	Limit         int    // 0 means "use Redmine's default page size"
+	All           bool   // ignore Limit and fetch every matching issue
 }
 
 type issueListResponse struct {
@@ -58,6 +60,9 @@ func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 	}
 	if f.TrackerID != "" {
 		base.Set("tracker_id", f.TrackerID)
+	}
+	if f.UpdatedAfter != "" || f.UpdatedBefore != "" {
+		base.Set("updated_on", dateRangeFilter(f.UpdatedAfter, f.UpdatedBefore))
 	}
 
 	want := f.Limit

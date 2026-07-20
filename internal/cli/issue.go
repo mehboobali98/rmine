@@ -22,6 +22,8 @@ var issueListCmd = &cobra.Command{
 		status, _ := cmd.Flags().GetString("status")
 		assignee, _ := cmd.Flags().GetString("assignee")
 		tracker, _ := cmd.Flags().GetString("tracker")
+		updatedAfter, _ := cmd.Flags().GetString("updated-after")
+		updatedBefore, _ := cmd.Flags().GetString("updated-before")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
 
@@ -31,12 +33,14 @@ var issueListCmd = &cobra.Command{
 		}
 
 		filter := redmine.IssueListFilter{
-			ProjectID:  project,
-			StatusID:   status,
-			AssignedTo: assignee,
-			TrackerID:  tracker,
-			Limit:      limit,
-			All:        all,
+			ProjectID:     project,
+			StatusID:      status,
+			AssignedTo:    assignee,
+			TrackerID:     tracker,
+			UpdatedAfter:  updatedAfter,
+			UpdatedBefore: updatedBefore,
+			Limit:         limit,
+			All:           all,
 		}
 		issues, err := client.ListIssues(filter)
 		if err != nil {
@@ -260,6 +264,8 @@ func init() {
 	issueListCmd.Flags().String("status", "", "filter by status ID, or open/closed/*")
 	issueListCmd.Flags().String("assignee", "", "filter by assignee user ID")
 	issueListCmd.Flags().String("tracker", "", "filter by tracker ID")
+	issueListCmd.Flags().String("updated-after", "", "only issues updated on or after this date (YYYY-MM-DD)")
+	issueListCmd.Flags().String("updated-before", "", "only issues updated on or before this date (YYYY-MM-DD)")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
 

@@ -114,6 +114,19 @@ func (c *Client) delete(path string) error {
 	return c.do(http.MethodDelete, path, nil, nil, nil)
 }
 
+// dateRangeFilter builds Redmine's range-filter syntax for a date field,
+// e.g. "><2026-01-01|2026-01-31", ">=2026-01-01", or "<=2026-01-31".
+func dateRangeFilter(from, to string) string {
+	switch {
+	case from != "" && to != "":
+		return fmt.Sprintf("><%s|%s", from, to)
+	case from != "":
+		return fmt.Sprintf(">=%s", from)
+	default:
+		return fmt.Sprintf("<=%s", to)
+	}
+}
+
 // IDName is Redmine's common {id, name} shape used for projects, trackers,
 // statuses, priorities, users, and activities embedded in other resources.
 type IDName struct {
