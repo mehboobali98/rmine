@@ -33,6 +33,11 @@ var issueListCmd = &cobra.Command{
 			return err
 		}
 
+		status, err = resolveStatusFilter(client, status)
+		if err != nil {
+			return err
+		}
+
 		filter := redmine.IssueListFilter{
 			ProjectID:     project,
 			StatusID:      status,
@@ -263,7 +268,7 @@ var issueCommentCmd = &cobra.Command{
 
 func init() {
 	issueListCmd.Flags().String("project", "", "filter by project ID or identifier")
-	issueListCmd.Flags().String("status", "", "filter by status ID, or open/closed/*")
+	issueListCmd.Flags().String("status", "", "filter by status name (e.g. New), status ID, or open/closed/*")
 	issueListCmd.Flags().String("assignee", "", "filter by assignee user ID")
 	issueListCmd.Flags().String("tracker", "", "filter by tracker ID")
 	issueListCmd.Flags().String("subject", "", "only issues whose subject contains this text")
@@ -307,4 +312,22 @@ func parseIssueID(s string) (int, error) {
 		return 0, fmt.Errorf("invalid issue ID %q", s)
 	}
 	return id, nil
+}
+
+// resolveStatusFilter passes numeric IDs and Redmine's open/closed/* keywords
+// through unchanged, and resolves anything else (e.g. "New", "In Progress")
+// to its status ID via the server's issue statuses.
+func resolveStatusFilter(client *redmine.Client, status string) (string, error) {
+	switch status {
+	case "", "open", "closed", "*":
+		return status, nil
+	}
+	if _, err := strconv.Atoi(status); err == nil {
+		return status, nil
+	}
+	id, err := client.ResolveIssueStatusID(status)
+	if err != nil {
+		return "", err
+	}
+	return strconv.Itoa(id), nil
 }
