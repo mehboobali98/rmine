@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -44,6 +45,55 @@ func TestListIssuesPagesThroughResults(t *testing.T) {
 	}
 	if len(offsetsSeen) < 2 {
 		t.Fatalf("expected multiple pages, saw offsets %v", offsetsSeen)
+	}
+}
+
+func TestListIssuesSubjectSearchUsesAdvancedFilters(t *testing.T) {
+	var gotQuery url.Values
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		resp := issueListResponse{Issues: []Issue{{ID: 1}}, TotalCount: 1}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, "test-key")
+	_, err := client.ListIssues(IssueListFilter{
+		Subject:    "CMDB",
+		AssignedTo: "me",
+		ProjectID:  "42",
+	})
+	if err != nil {
+		t.Fatalf("ListIssues: %v", err)
+	}
+
+	fields := gotQuery["f[]"]
+	wantFields := map[string]bool{"project_id": true, "assigned_to_id": true, "subject": true}
+	if len(fields) != len(wantFields) {
+		t.Fatalf("f[] = %v, want fields %v", fields, wantFields)
+	}
+	for _, f := range fields {
+		if !wantFields[f] {
+			t.Errorf("unexpected filter field %q", f)
+		}
+	}
+	if gotQuery.Get("op[subject]") != "~" {
+		t.Errorf("op[subject] = %q, want ~", gotQuery.Get("op[subject]"))
+	}
+	if gotQuery.Get("v[subject][]") != "CMDB" {
+		t.Errorf("v[subject][] = %q, want CMDB", gotQuery.Get("v[subject][]"))
+	}
+	if gotQuery.Get("op[project_id]") != "=" || gotQuery.Get("v[project_id][]") != "42" {
+		t.Errorf("project_id filter = op %q value %q", gotQuery.Get("op[project_id]"), gotQuery.Get("v[project_id][]"))
+	}
+	if gotQuery.Get("op[assigned_to_id]") != "=" || gotQuery.Get("v[assigned_to_id][]") != "me" {
+		t.Errorf("assigned_to_id filter = op %q value %q", gotQuery.Get("op[assigned_to_id]"), gotQuery.Get("v[assigned_to_id][]"))
+	}
+	// The simple-param path must not also be sent — Redmine ignores it once f[] is present.
+	if gotQuery.Get("project_id") != "" || gotQuery.Get("assigned_to_id") != "" {
+		t.Errorf("simple params leaked alongside advanced filters: %v", gotQuery)
 	}
 }
 

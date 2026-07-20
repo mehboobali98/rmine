@@ -45,7 +45,7 @@ rdm config list-profiles
 |---|---|
 | `rdm whoami` | Show the user for the active profile's API key |
 | `rdm project list` / `view <id>` | Browse projects |
-| `rdm issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--limit`, `--all`) |
+| `rdm issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--limit`, `--all`) |
 | `rdm issue view <id>` | Show issue details |
 | `rdm issue create` | Create an issue (`--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--assignee`) |
 | `rdm issue update <id>` | Edit an issue |
@@ -59,7 +59,9 @@ rdm config list-profiles
 
 Every command accepts `-o json` for scripting-friendly output, and `--profile <name>` to target a specific server for that one call.
 
-Assignees are set/filtered by numeric Redmine user ID; looking users up by name isn't in scope yet.
+Assignees are set/filtered by numeric Redmine user ID (or the literal `me`); looking other users up by name isn't in scope yet.
+
+`--subject` (and combining it with other filters) uses Redmine's advanced filter syntax under the hood, which doesn't default to open-only issues the way the plain filters do — expect closed issues in the results too unless you also pass `--status open`.
 
 Shell completion is available via `rdm completion bash|zsh|fish` (see `rdm completion --help` for setup instructions).
 

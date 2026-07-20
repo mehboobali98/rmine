@@ -22,6 +22,7 @@ var issueListCmd = &cobra.Command{
 		status, _ := cmd.Flags().GetString("status")
 		assignee, _ := cmd.Flags().GetString("assignee")
 		tracker, _ := cmd.Flags().GetString("tracker")
+		subject, _ := cmd.Flags().GetString("subject")
 		updatedAfter, _ := cmd.Flags().GetString("updated-after")
 		updatedBefore, _ := cmd.Flags().GetString("updated-before")
 		limit, _ := cmd.Flags().GetInt("limit")
@@ -37,6 +38,7 @@ var issueListCmd = &cobra.Command{
 			StatusID:      status,
 			AssignedTo:    assignee,
 			TrackerID:     tracker,
+			Subject:       subject,
 			UpdatedAfter:  updatedAfter,
 			UpdatedBefore: updatedBefore,
 			Limit:         limit,
@@ -264,6 +266,7 @@ func init() {
 	issueListCmd.Flags().String("status", "", "filter by status ID, or open/closed/*")
 	issueListCmd.Flags().String("assignee", "", "filter by assignee user ID")
 	issueListCmd.Flags().String("tracker", "", "filter by tracker ID")
+	issueListCmd.Flags().String("subject", "", "only issues whose subject contains this text")
 	issueListCmd.Flags().String("updated-after", "", "only issues updated on or after this date (YYYY-MM-DD)")
 	issueListCmd.Flags().String("updated-before", "", "only issues updated on or before this date (YYYY-MM-DD)")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
