@@ -1,0 +1,2 @@
+# rdm
+Redmine CLI
