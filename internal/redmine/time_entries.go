@@ -104,14 +104,7 @@ func (c *Client) ListTimeEntries(f TimeEntryListFilter) ([]TimeEntry, error) {
 
 // spentOnRange builds Redmine's range-filter syntax for the spent_on field.
 func spentOnRange(from, to string) string {
-	switch {
-	case from != "" && to != "":
-		return fmt.Sprintf("><%s|%s", from, to)
-	case from != "":
-		return fmt.Sprintf(">=%s", from)
-	default:
-		return fmt.Sprintf("<=%s", to)
-	}
+	return dateRangeFilter(from, to)
 }
 
 // CreateTimeEntryRequest describes a new time entry. Exactly one of IssueID

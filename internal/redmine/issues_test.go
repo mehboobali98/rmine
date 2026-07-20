@@ -47,6 +47,36 @@ func TestListIssuesPagesThroughResults(t *testing.T) {
 	}
 }
 
+func TestListIssuesAppliesAssigneeAndDateFilters(t *testing.T) {
+	var gotQuery map[string]string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = map[string]string{
+			"assigned_to_id": r.URL.Query().Get("assigned_to_id"),
+			"updated_on":     r.URL.Query().Get("updated_on"),
+		}
+		resp := issueListResponse{Issues: []Issue{{ID: 1}}, TotalCount: 1}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, "test-key")
+	_, err := client.ListIssues(IssueListFilter{
+		AssignedTo:   "me",
+		UpdatedAfter: "2026-07-01",
+	})
+	if err != nil {
+		t.Fatalf("ListIssues: %v", err)
+	}
+	if gotQuery["assigned_to_id"] != "me" {
+		t.Errorf("assigned_to_id = %q, want me", gotQuery["assigned_to_id"])
+	}
+	if gotQuery["updated_on"] != ">=2026-07-01" {
+		t.Errorf("updated_on = %q, want >=2026-07-01", gotQuery["updated_on"])
+	}
+}
+
 func TestListIssuesRespectsLimit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := issueListResponse{
