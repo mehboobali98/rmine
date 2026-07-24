@@ -12,6 +12,13 @@ go install github.com/mehboobali98/rmine/cmd/rmine@latest
 
 `go install` puts the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`) — make sure that's on your `PATH`.
 
+### Uninstall
+
+```sh
+rm "$(go env GOPATH)/bin/rmine"
+rm -rf ~/.config/rmine   # also drop saved profiles/API keys
+```
+
 ## Getting started
 
 ```sh
