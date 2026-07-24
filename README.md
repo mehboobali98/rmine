@@ -12,8 +12,6 @@ go install github.com/mehboobali98/rmine/cmd/rmine@latest
 
 `go install` puts the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`) — make sure that's on your `PATH`.
 
-(This project was originally named `rdm`, which collided with the `rdm` alias oh-my-zsh's `rails` plugin sets for `rails db:migrate` — a real problem for a Rails-shop audience. It's `rmine` now specifically to avoid that.)
-
 ## Getting started
 
 ```sh

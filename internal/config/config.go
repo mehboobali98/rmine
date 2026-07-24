@@ -16,7 +16,6 @@ type Profile struct {
 	APIKey string `yaml:"api_key"`
 }
 
-// Config is the full contents of the config file.
 type Config struct {
 	CurrentProfile string             `yaml:"current_profile"`
 	Profiles       map[string]Profile `yaml:"profiles"`

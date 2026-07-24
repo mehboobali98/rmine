@@ -8,7 +8,6 @@ import (
 	"text/tabwriter"
 )
 
-// printTable renders rows as an aligned, human-readable table.
 func printTable(headers []string, rows [][]string) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
 	defer w.Flush()
@@ -18,7 +17,6 @@ func printTable(headers []string, rows [][]string) {
 	}
 }
 
-// printJSON renders v as indented JSON for scripting use.
 func printJSON(v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {

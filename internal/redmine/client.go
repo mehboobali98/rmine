@@ -20,7 +20,6 @@ type Client struct {
 	http    *http.Client
 }
 
-// New builds a Client for the given Redmine base URL and API key.
 func New(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
