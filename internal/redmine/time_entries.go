@@ -173,6 +173,7 @@ func (c *Client) UpdateTimeEntry(id int, req UpdateTimeEntryRequest) error {
 	return c.put(fmt.Sprintf("/time_entries/%d.json", id), body)
 }
 
+// DeleteTimeEntry removes a time entry.
 func (c *Client) DeleteTimeEntry(id int) error {
 	return c.delete(fmt.Sprintf("/time_entries/%d.json", id))
 }

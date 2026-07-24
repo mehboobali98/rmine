@@ -1,5 +1,6 @@
 package redmine
 
+// User is a Redmine user.
 type User struct {
 	ID        int    `json:"id"`
 	Login     string `json:"login"`
