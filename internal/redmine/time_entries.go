@@ -23,7 +23,7 @@ type TimeEntry struct {
 	SpentOn  string             `json:"spent_on"`
 }
 
-// TimeEntryListFilter narrows a `rdm time list` query. Empty fields are omitted.
+// TimeEntryListFilter narrows a `rmine time list` query. Empty fields are omitted.
 type TimeEntryListFilter struct {
 	IssueID   string
 	ProjectID string

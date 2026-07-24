@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mehboobali98/rdm/internal/config"
+	"github.com/mehboobali98/rmine/internal/config"
 )
 
 // setupTestProfile points a "test" profile at srv and selects it, without

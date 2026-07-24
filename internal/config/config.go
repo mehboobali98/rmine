@@ -1,4 +1,4 @@
-// Package config manages rdm's on-disk configuration: named Redmine server
+// Package config manages rmine's on-disk configuration: named Redmine server
 // profiles (URL + API key) and which one is currently active.
 package config
 
@@ -25,7 +25,7 @@ type Config struct {
 }
 
 // Path returns the config file location, honoring $XDG_CONFIG_HOME and
-// falling back to ~/.config/rdm/config.yml.
+// falling back to ~/.config/rmine/config.yml.
 func Path() (string, error) {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
@@ -35,7 +35,7 @@ func Path() (string, error) {
 		}
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "rdm", "config.yml"), nil
+	return filepath.Join(base, "rmine", "config.yml"), nil
 }
 
 // Load reads the config file, returning an empty Config if it doesn't exist yet.
@@ -84,17 +84,17 @@ func (c *Config) Save() error {
 }
 
 // Resolve picks the active profile: an explicit flag value wins, then
-// $RDM_PROFILE, then the config's current_profile.
+// $RMINE_PROFILE, then the config's current_profile.
 func (c *Config) Resolve(profileFlag string) (Profile, error) {
 	name := profileFlag
 	if name == "" {
-		name = os.Getenv("RDM_PROFILE")
+		name = os.Getenv("RMINE_PROFILE")
 	}
 	if name == "" {
 		name = c.CurrentProfile
 	}
 	if name == "" {
-		return Profile{}, fmt.Errorf("no profile configured — run `rdm config init`")
+		return Profile{}, fmt.Errorf("no profile configured — run `rmine config init`")
 	}
 
 	p, ok := c.Profiles[name]

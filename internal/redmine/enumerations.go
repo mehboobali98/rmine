@@ -117,7 +117,7 @@ func (c *Client) ResolveIssueStatusID(name string) (int, error) {
 }
 
 // DefaultClosedStatusID returns the ID of the first status flagged as
-// "closed", used by `rdm issue close` when no explicit --status is given.
+// "closed", used by `rmine issue close` when no explicit --status is given.
 func (c *Client) DefaultClosedStatusID() (int, error) {
 	statuses, err := c.ListIssueStatuses()
 	if err != nil {

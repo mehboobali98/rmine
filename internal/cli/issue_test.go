@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mehboobali98/rdm/internal/redmine"
+	"github.com/mehboobali98/rmine/internal/redmine"
 )
 
 func TestResolveStatusFilter(t *testing.T) {

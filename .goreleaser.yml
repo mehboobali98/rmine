@@ -1,8 +1,8 @@
 version: 2
 
 builds:
-  - main: ./cmd/rdm
-    binary: rdm
+  - main: ./cmd/rmine
+    binary: rmine
     env:
       - CGO_ENABLED=0
     goos:
