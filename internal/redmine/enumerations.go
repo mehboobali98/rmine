@@ -20,6 +20,7 @@ func (c *Client) ListTrackers() ([]IDName, error) {
 	return resp.Trackers, nil
 }
 
+// ListIssueStatuses returns every issue status defined on the server.
 func (c *Client) ListIssueStatuses() ([]IssueStatus, error) {
 	var resp struct {
 		IssueStatuses []IssueStatus `json:"issue_statuses"`
@@ -30,6 +31,7 @@ func (c *Client) ListIssueStatuses() ([]IssueStatus, error) {
 	return resp.IssueStatuses, nil
 }
 
+// ListIssuePriorities returns every issue priority defined on the server.
 func (c *Client) ListIssuePriorities() ([]IDName, error) {
 	var resp struct {
 		IssuePriorities []IDName `json:"issue_priorities"`
@@ -61,6 +63,7 @@ func findIDByName(items []IDName, name string) (int, error) {
 	return 0, fmt.Errorf("no match for %q", name)
 }
 
+// ResolveTrackerID resolves a tracker name (e.g. "Bug") to its ID.
 func (c *Client) ResolveTrackerID(name string) (int, error) {
 	items, err := c.ListTrackers()
 	if err != nil {
@@ -73,6 +76,7 @@ func (c *Client) ResolveTrackerID(name string) (int, error) {
 	return id, nil
 }
 
+// ResolveIssuePriorityID resolves a priority name (e.g. "High") to its ID.
 func (c *Client) ResolveIssuePriorityID(name string) (int, error) {
 	items, err := c.ListIssuePriorities()
 	if err != nil {
@@ -85,6 +89,7 @@ func (c *Client) ResolveIssuePriorityID(name string) (int, error) {
 	return id, nil
 }
 
+// ResolveTimeEntryActivityID resolves an activity name (e.g. "Development") to its ID.
 func (c *Client) ResolveTimeEntryActivityID(name string) (int, error) {
 	items, err := c.ListTimeEntryActivities()
 	if err != nil {
@@ -97,6 +102,7 @@ func (c *Client) ResolveTimeEntryActivityID(name string) (int, error) {
 	return id, nil
 }
 
+// ResolveIssueStatusID resolves a status name (e.g. "Resolved") to its ID.
 func (c *Client) ResolveIssueStatusID(name string) (int, error) {
 	statuses, err := c.ListIssueStatuses()
 	if err != nil {
