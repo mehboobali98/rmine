@@ -6,7 +6,6 @@ import (
 	"strconv"
 )
 
-// Project is a Redmine project.
 type Project struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
@@ -49,7 +48,6 @@ func (c *Client) ListProjects() ([]Project, error) {
 	return all, nil
 }
 
-// GetProject fetches a single project by numeric ID or string identifier.
 func (c *Client) GetProject(idOrIdentifier string) (*Project, error) {
 	var resp projectResponse
 	if err := c.get(fmt.Sprintf("/projects/%s.json", idOrIdentifier), nil, &resp); err != nil {

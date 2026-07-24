@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// Issue is a Redmine issue.
 type Issue struct {
 	ID          int       `json:"id"`
 	Project     IDName    `json:"project"`
@@ -165,7 +164,6 @@ func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 	return all, nil
 }
 
-// GetIssue fetches a single issue by ID.
 func (c *Client) GetIssue(id int) (*Issue, error) {
 	var resp issueResponse
 	if err := c.get(fmt.Sprintf("/issues/%d.json", id), nil, &resp); err != nil {

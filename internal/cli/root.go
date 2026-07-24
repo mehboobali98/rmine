@@ -50,7 +50,6 @@ func newClient() (*redmine.Client, error) {
 	return redmine.New(profile.URL, profile.APIKey), nil
 }
 
-// wantsJSON reports whether -o/--output json was requested.
 func wantsJSON() bool {
 	return outputFlag == "json"
 }
