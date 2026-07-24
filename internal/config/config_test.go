@@ -67,7 +67,7 @@ func TestResolvePrecedence(t *testing.T) {
 			"default": {URL: "https://default.example.com"},
 			"work":    {URL: "https://work.example.com"},
 		},
-		path: filepath.Join(dir, "rdm", "config.yml"),
+		path: filepath.Join(dir, "rmine", "config.yml"),
 	}
 
 	// No override: falls back to CurrentProfile.
@@ -77,8 +77,8 @@ func TestResolvePrecedence(t *testing.T) {
 	}
 
 	// Env var overrides CurrentProfile.
-	os.Setenv("RDM_PROFILE", "work")
-	t.Cleanup(func() { os.Unsetenv("RDM_PROFILE") })
+	os.Setenv("RMINE_PROFILE", "work")
+	t.Cleanup(func() { os.Unsetenv("RMINE_PROFILE") })
 	p, err = cfg.Resolve("")
 	if err != nil || p.URL != "https://work.example.com" {
 		t.Fatalf("Resolve with env var = %+v, %v", p, err)

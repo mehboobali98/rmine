@@ -1,5 +1,5 @@
 // Package redmine is a minimal client for the parts of the Redmine REST API
-// that rdm needs: issues, projects, time entries, and the enumerations used
+// that rmine needs: issues, projects, time entries, and the enumerations used
 // to resolve human-readable names to the IDs the API expects.
 package redmine
 

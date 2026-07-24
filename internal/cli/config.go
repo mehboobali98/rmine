@@ -9,13 +9,13 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/mehboobali98/rdm/internal/config"
-	"github.com/mehboobali98/rdm/internal/redmine"
+	"github.com/mehboobali98/rmine/internal/config"
+	"github.com/mehboobali98/rmine/internal/redmine"
 )
 
 var configCmd = &cobra.Command{
 	Use:   "config",
-	Short: "Manage rdm's server profiles",
+	Short: "Manage rmine's server profiles",
 }
 
 var configInitCmd = &cobra.Command{
@@ -66,7 +66,7 @@ var configListProfilesCmd = &cobra.Command{
 			return err
 		}
 		if len(cfg.Profiles) == 0 {
-			fmt.Println("No profiles configured yet — run `rdm config init`.")
+			fmt.Println("No profiles configured yet — run `rmine config init`.")
 			return nil
 		}
 

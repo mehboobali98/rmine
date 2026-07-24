@@ -22,7 +22,7 @@ type Issue struct {
 	UpdatedOn   time.Time `json:"updated_on"`
 }
 
-// IssueListFilter narrows a `rdm issue list` query. Empty fields are omitted.
+// IssueListFilter narrows a `rmine issue list` query. Empty fields are omitted.
 type IssueListFilter struct {
 	ProjectID     string
 	StatusID      string

@@ -1,4 +1,4 @@
-module github.com/mehboobali98/rdm
+module github.com/mehboobali98/rmine
 
 go 1.26.5
 

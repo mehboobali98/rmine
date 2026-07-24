@@ -1,4 +1,4 @@
-// Package cli wires up rdm's cobra command tree.
+// Package cli wires up rmine's cobra command tree.
 package cli
 
 import (
@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/mehboobali98/rdm/internal/config"
-	"github.com/mehboobali98/rdm/internal/redmine"
+	"github.com/mehboobali98/rmine/internal/config"
+	"github.com/mehboobali98/rmine/internal/redmine"
 )
 
 var (
@@ -17,7 +17,7 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:           "rdm",
+	Use:           "rmine",
 	Short:         "A command-line client for Redmine",
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -32,7 +32,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "profile to use (overrides $RDM_PROFILE and the configured default)")
+	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "profile to use (overrides $RMINE_PROFILE and the configured default)")
 	rootCmd.PersistentFlags().StringVarP(&outputFlag, "output", "o", "table", "output format: table|json")
 }
 

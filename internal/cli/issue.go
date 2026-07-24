@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/mehboobali98/rdm/internal/redmine"
+	"github.com/mehboobali98/rmine/internal/redmine"
 )
 
 var issueCmd = &cobra.Command{
