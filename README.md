@@ -16,7 +16,8 @@ go install github.com/mehboobali98/rmine/cmd/rmine@latest
 
 ```sh
 rm "$(go env GOPATH)/bin/rmine"
-rm -rf ~/.config/rmine   # also drop saved profiles/API keys
+rm -rf ~/.config/rmine        # also drop saved profiles/API keys
+rm -rf ~/.claude/skills/rmine # also drop the installed Claude Code skill
 ```
 
 ## Getting started
@@ -25,7 +26,7 @@ rm -rf ~/.config/rmine   # also drop saved profiles/API keys
 rmine config init
 ```
 
-You'll be asked for your Redmine server URL and a personal API key (found under *My account → API access key* in Redmine). This saves a `default` profile and verifies it works.
+You'll be asked for your Redmine server URL and a personal API key (found under *My account → API access key* in Redmine). This saves a `default` profile and verifies it works, then offers to install a [Claude Code](https://claude.com/claude-code) skill (`~/.claude/skills/rmine/`) so an AI assistant knows how to drive rmine — run `rmine skill install` any time to (re)install it manually.
 
 ```sh
 rmine whoami
@@ -73,6 +74,7 @@ rmine config list-profiles
 | `rmine time edit <id>` | Edit a time entry |
 | `rmine time delete <id>` | Delete a time entry (prompts unless `-y`/`--force`) |
 | `rmine config init` / `add-profile` / `use-profile` / `list-profiles` | Manage server profiles |
+| `rmine skill install` | Install/refresh the rmine reference as a Claude Code skill (`~/.claude/skills/rmine/SKILL.md`) |
 
 Every command accepts `-o json` for scripting-friendly output, and `--profile <name>` to target a specific server for that one call.
 
