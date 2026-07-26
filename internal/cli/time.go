@@ -80,6 +80,11 @@ var timeListCmd = &cobra.Command{
 			return err
 		}
 
+		project, err = resolveProjectFilter(client, project)
+		if err != nil {
+			return err
+		}
+
 		filter := redmine.TimeEntryListFilter{
 			IssueID:   issue,
 			ProjectID: project,
@@ -198,7 +203,7 @@ func init() {
 	_ = timeLogCmd.MarkFlagRequired("hours")
 
 	timeListCmd.Flags().String("issue", "", "filter by issue ID")
-	timeListCmd.Flags().String("project", "", "filter by project ID or identifier")
+	timeListCmd.Flags().String("project", "", "filter by project ID, identifier, or name")
 	timeListCmd.Flags().String("user", "", "filter by user ID")
 	timeListCmd.Flags().String("from", "", "only entries spent on or after this date (YYYY-MM-DD)")
 	timeListCmd.Flags().String("to", "", "only entries spent on or before this date (YYYY-MM-DD)")

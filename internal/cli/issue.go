@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -25,6 +27,10 @@ var issueListCmd = &cobra.Command{
 		subject, _ := cmd.Flags().GetString("subject")
 		updatedAfter, _ := cmd.Flags().GetString("updated-after")
 		updatedBefore, _ := cmd.Flags().GetString("updated-before")
+		dueAfter, _ := cmd.Flags().GetString("due-after")
+		dueBefore, _ := cmd.Flags().GetString("due-before")
+		dueWithin, _ := cmd.Flags().GetInt("due-within")
+		dueNextWeek, _ := cmd.Flags().GetBool("due-next-week")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
 
@@ -37,6 +43,14 @@ var issueListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		project, err = resolveProjectFilter(client, project)
+		if err != nil {
+			return err
+		}
+		dueAfter, dueBefore, err = resolveDueDateRange(time.Now(), dueAfter, dueBefore, dueWithin, dueNextWeek)
+		if err != nil {
+			return err
+		}
 
 		filter := redmine.IssueListFilter{
 			ProjectID:     project,
@@ -46,6 +60,8 @@ var issueListCmd = &cobra.Command{
 			Subject:       subject,
 			UpdatedAfter:  updatedAfter,
 			UpdatedBefore: updatedBefore,
+			DueAfter:      dueAfter,
+			DueBefore:     dueBefore,
 			Limit:         limit,
 			All:           all,
 		}
@@ -102,6 +118,12 @@ var issueViewCmd = &cobra.Command{
 		fmt.Printf("Status:   %s\n", issue.Status.Name)
 		fmt.Printf("Priority: %s\n", issue.Priority.Name)
 		fmt.Printf("Assignee: %s\n", assigneeName(issue.AssignedTo))
+		if issue.Category != nil {
+			fmt.Printf("Category: %s\n", issue.Category.Name)
+		}
+		for _, f := range issue.CustomFields {
+			fmt.Printf("%s (id %d): %s\n", f.Name, f.ID, f.Value)
+		}
 		if issue.Description != "" {
 			fmt.Printf("\n%s\n", issue.Description)
 		}
@@ -118,18 +140,31 @@ var issueCreateCmd = &cobra.Command{
 		description, _ := cmd.Flags().GetString("description")
 		trackerName, _ := cmd.Flags().GetString("tracker")
 		priorityName, _ := cmd.Flags().GetString("priority")
+		categoryName, _ := cmd.Flags().GetString("category")
 		assignee, _ := cmd.Flags().GetInt("assignee")
+		fieldArgs, _ := cmd.Flags().GetStringArray("field")
+
+		customFields, err := parseCustomFields(fieldArgs)
+		if err != nil {
+			return err
+		}
 
 		client, err := newClient()
 		if err != nil {
 			return err
 		}
 
+		project, err = resolveProjectFilter(client, project)
+		if err != nil {
+			return err
+		}
+
 		req := redmine.CreateIssueRequest{
-			ProjectID:   project,
-			Subject:     subject,
-			Description: description,
-			AssignedTo:  assignee,
+			ProjectID:    project,
+			Subject:      subject,
+			Description:  description,
+			AssignedTo:   assignee,
+			CustomFields: customFields,
 		}
 		if trackerName != "" {
 			req.TrackerID, err = client.ResolveTrackerID(trackerName)
@@ -139,6 +174,12 @@ var issueCreateCmd = &cobra.Command{
 		}
 		if priorityName != "" {
 			req.PriorityID, err = client.ResolveIssuePriorityID(priorityName)
+			if err != nil {
+				return err
+			}
+		}
+		if categoryName != "" {
+			req.CategoryID, err = client.ResolveIssueCategoryID(project, categoryName)
 			if err != nil {
 				return err
 			}
@@ -172,7 +213,14 @@ var issueUpdateCmd = &cobra.Command{
 		trackerName, _ := cmd.Flags().GetString("tracker")
 		priorityName, _ := cmd.Flags().GetString("priority")
 		statusName, _ := cmd.Flags().GetString("status")
+		categoryName, _ := cmd.Flags().GetString("category")
 		assignee, _ := cmd.Flags().GetInt("assignee")
+		fieldArgs, _ := cmd.Flags().GetStringArray("field")
+
+		customFields, err := parseCustomFields(fieldArgs)
+		if err != nil {
+			return err
+		}
 
 		client, err := newClient()
 		if err != nil {
@@ -180,9 +228,10 @@ var issueUpdateCmd = &cobra.Command{
 		}
 
 		req := redmine.UpdateIssueRequest{
-			Subject:     subject,
-			Description: description,
-			AssignedTo:  assignee,
+			Subject:      subject,
+			Description:  description,
+			AssignedTo:   assignee,
+			CustomFields: customFields,
 		}
 		if trackerName != "" {
 			req.TrackerID, err = client.ResolveTrackerID(trackerName)
@@ -198,6 +247,16 @@ var issueUpdateCmd = &cobra.Command{
 		}
 		if statusName != "" {
 			req.StatusID, err = client.ResolveIssueStatusID(statusName)
+			if err != nil {
+				return err
+			}
+		}
+		if categoryName != "" {
+			issue, err := client.GetIssue(id)
+			if err != nil {
+				return err
+			}
+			req.CategoryID, err = client.ResolveIssueCategoryID(strconv.Itoa(issue.Project.ID), categoryName)
 			if err != nil {
 				return err
 			}
@@ -267,22 +326,28 @@ var issueCommentCmd = &cobra.Command{
 }
 
 func init() {
-	issueListCmd.Flags().String("project", "", "filter by project ID or identifier")
-	issueListCmd.Flags().String("status", "", "filter by status name (e.g. New), status ID, or open/closed/*")
-	issueListCmd.Flags().String("assignee", "", "filter by assignee user ID")
+	issueListCmd.Flags().String("project", "", "filter by project ID, identifier, or name (e.g. \"AssetSonar Scrum Team\")")
+	issueListCmd.Flags().String("status", "", "filter by status name (e.g. In Progress), status ID, or open/closed/*")
+	issueListCmd.Flags().String("assignee", "", "filter by assignee user ID (or \"me\" for the authenticated user)")
 	issueListCmd.Flags().String("tracker", "", "filter by tracker ID")
 	issueListCmd.Flags().String("subject", "", "only issues whose subject contains this text")
 	issueListCmd.Flags().String("updated-after", "", "only issues updated on or after this date (YYYY-MM-DD)")
 	issueListCmd.Flags().String("updated-before", "", "only issues updated on or before this date (YYYY-MM-DD)")
+	issueListCmd.Flags().String("due-after", "", "only issues due on or after this date (YYYY-MM-DD)")
+	issueListCmd.Flags().String("due-before", "", "only issues due on or before this date (YYYY-MM-DD)")
+	issueListCmd.Flags().Int("due-within", 0, "only issues due within this many days from today")
+	issueListCmd.Flags().Bool("due-next-week", false, "only issues due next week (Mon-Sun)")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
 
-	issueCreateCmd.Flags().String("project", "", "project ID or identifier (required)")
+	issueCreateCmd.Flags().String("project", "", "project ID, identifier, or name (required)")
 	issueCreateCmd.Flags().String("subject", "", "issue subject (required)")
 	issueCreateCmd.Flags().String("description", "", "issue description")
 	issueCreateCmd.Flags().String("tracker", "", "tracker name, e.g. Bug")
 	issueCreateCmd.Flags().String("priority", "", "priority name, e.g. High")
+	issueCreateCmd.Flags().String("category", "", "issue category name (project-specific; see `rmine project categories <project>`)")
 	issueCreateCmd.Flags().Int("assignee", 0, "assignee user ID")
+	issueCreateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable); find IDs via `rmine issue view <id> -o json` on an existing issue")
 	_ = issueCreateCmd.MarkFlagRequired("project")
 	_ = issueCreateCmd.MarkFlagRequired("subject")
 
@@ -291,7 +356,9 @@ func init() {
 	issueUpdateCmd.Flags().String("tracker", "", "new tracker name")
 	issueUpdateCmd.Flags().String("priority", "", "new priority name")
 	issueUpdateCmd.Flags().String("status", "", "new status name")
+	issueUpdateCmd.Flags().String("category", "", "new category name (project-specific; see `rmine project categories <project>`)")
 	issueUpdateCmd.Flags().Int("assignee", 0, "new assignee user ID")
+	issueUpdateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable)")
 
 	issueCloseCmd.Flags().String("status", "", "status name to close with (defaults to the server's first closed status)")
 
@@ -330,4 +397,74 @@ func resolveStatusFilter(client *redmine.Client, status string) (string, error) 
 		return "", err
 	}
 	return strconv.Itoa(id), nil
+}
+
+// resolveProjectFilter passes numeric IDs through unchanged and resolves a
+// display name (e.g. "AssetSonar Scrum Team") to its numeric ID via the
+// server's projects. Anything else (e.g. an identifier slug) is passed
+// through as-is for Redmine to validate.
+func resolveProjectFilter(client *redmine.Client, project string) (string, error) {
+	if project == "" {
+		return "", nil
+	}
+	if _, err := strconv.Atoi(project); err == nil {
+		return project, nil
+	}
+	if id, err := client.ResolveProjectID(project); err == nil {
+		return strconv.Itoa(id), nil
+	}
+	return project, nil
+}
+
+// parseCustomFields turns repeated "--field id=value" flags into custom
+// field updates. IDs (not names) are required: custom field definitions are
+// per-instance and Redmine's enumeration endpoint for them is admin-only, so
+// there's no reliable way to resolve a name to an ID for every server.
+func parseCustomFields(raw []string) ([]redmine.CustomField, error) {
+	fields := make([]redmine.CustomField, 0, len(raw))
+	for _, kv := range raw {
+		idStr, value, ok := strings.Cut(kv, "=")
+		if !ok {
+			return nil, fmt.Errorf("invalid --field %q, want id=value", kv)
+		}
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --field %q: id must be numeric", kv)
+		}
+		fields = append(fields, redmine.CustomField{ID: id, Value: redmine.FieldValue(value)})
+	}
+	return fields, nil
+}
+
+// resolveDueDateRange combines the raw --due-after/--due-before dates with
+// the --due-within/--due-next-week shortcuts into a single (after, before)
+// range, relative to now. The shortcuts are mutually exclusive with each
+// other and with the raw flags.
+func resolveDueDateRange(now time.Time, after, before string, within int, nextWeek bool) (string, string, error) {
+	shortcuts := 0
+	if within > 0 {
+		shortcuts++
+	}
+	if nextWeek {
+		shortcuts++
+	}
+	if shortcuts > 1 {
+		return "", "", fmt.Errorf("only one of --due-within or --due-next-week may be set")
+	}
+	if shortcuts > 0 && (after != "" || before != "") {
+		return "", "", fmt.Errorf("--due-within/--due-next-week cannot be combined with --due-after/--due-before")
+	}
+
+	const layout = "2006-01-02"
+	switch {
+	case within > 0:
+		return now.Format(layout), now.AddDate(0, 0, within).Format(layout), nil
+	case nextWeek:
+		monday := now.AddDate(0, 0, -((int(now.Weekday()) + 6) % 7))
+		nextMonday := monday.AddDate(0, 0, 7)
+		nextSunday := nextMonday.AddDate(0, 0, 6)
+		return nextMonday.Format(layout), nextSunday.Format(layout), nil
+	default:
+		return after, before, nil
+	}
 }
