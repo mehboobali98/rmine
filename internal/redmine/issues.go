@@ -31,18 +31,50 @@ type Issue struct {
 // admin and can't be known ahead of time. Name is populated by Redmine on
 // read; set fields by ID on write — find the ID for a field by inspecting
 // an existing issue via `rmine issue view <id> -o json`.
+//
+// Values, when it has 2+ elements, marshals as a JSON array instead of
+// Value's plain string — Redmine requires an array to set more than one
+// option on a checkbox/multi-select field. Leave Values empty and set Value
+// for every single-value field (the common case).
 type CustomField struct {
-	ID    int        `json:"id"`
-	Name  string     `json:"name,omitempty"`
-	Value FieldValue `json:"value"`
+	ID     int
+	Name   string
+	Value  FieldValue
+	Values []string
+}
+
+func (f CustomField) MarshalJSON() ([]byte, error) {
+	wire := struct {
+		ID    int    `json:"id"`
+		Name  string `json:"name,omitempty"`
+		Value any    `json:"value"`
+	}{ID: f.ID, Name: f.Name}
+	if len(f.Values) > 0 {
+		wire.Value = f.Values
+	} else {
+		wire.Value = string(f.Value)
+	}
+	return json.Marshal(wire)
+}
+
+func (f *CustomField) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		ID    int        `json:"id"`
+		Name  string     `json:"name,omitempty"`
+		Value FieldValue `json:"value"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	f.ID, f.Name, f.Value = wire.ID, wire.Name, wire.Value
+	return nil
 }
 
 // FieldValue is a custom field's value. Redmine encodes single-value fields
 // as a JSON string but multi-value fields (checkboxes, multi-selects) as a
 // JSON array of strings; both unmarshal here as one string, joined with
-// ", " in the multi-value case. Values sent back to Redmine are always a
-// single string — setting a multi-value field via --field replaces it with
-// one value.
+// ", " in the multi-value case. To write more than one value back, set
+// CustomField.Values instead.
 type FieldValue string
 
 func (v *FieldValue) UnmarshalJSON(data []byte) error {

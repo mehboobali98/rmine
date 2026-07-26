@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -120,13 +121,8 @@ func TestParseCustomFields(t *testing.T) {
 		t.Fatalf("parseCustomFields: %v", err)
 	}
 	want := []redmine.CustomField{{ID: 12, Value: "staging"}, {ID: 34, Value: "P1"}}
-	if len(fields) != len(want) {
-		t.Fatalf("got %d fields, want %d", len(fields), len(want))
-	}
-	for i, f := range fields {
-		if f != want[i] {
-			t.Errorf("field %d = %+v, want %+v", i, f, want[i])
-		}
+	if !reflect.DeepEqual(fields, want) {
+		t.Errorf("fields = %+v, want %+v", fields, want)
 	}
 
 	if _, err := parseCustomFields([]string{"no-equals-sign"}); err == nil {
@@ -134,5 +130,16 @@ func TestParseCustomFields(t *testing.T) {
 	}
 	if _, err := parseCustomFields([]string{"notanumber=value"}); err == nil {
 		t.Error("expected an error for a non-numeric id")
+	}
+}
+
+func TestParseCustomFieldsCombinesRepeatedIDIntoMultiValue(t *testing.T) {
+	fields, err := parseCustomFields([]string{"11=16", "11=27"})
+	if err != nil {
+		t.Fatalf("parseCustomFields: %v", err)
+	}
+	want := []redmine.CustomField{{ID: 11, Values: []string{"16", "27"}}}
+	if !reflect.DeepEqual(fields, want) {
+		t.Errorf("fields = %+v, want %+v", fields, want)
 	}
 }

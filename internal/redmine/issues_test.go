@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"testing"
 )
 
@@ -231,8 +232,46 @@ func TestCreateIssueSendsCustomFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
-	if len(gotBody.Issue.CustomFields) != 1 || gotBody.Issue.CustomFields[0] != (CustomField{ID: 12, Value: "staging"}) {
-		t.Errorf("custom_fields sent = %+v, want [{12 staging}]", gotBody.Issue.CustomFields)
+	want := CustomField{ID: 12, Value: "staging"}
+	if len(gotBody.Issue.CustomFields) != 1 || !reflect.DeepEqual(gotBody.Issue.CustomFields[0], want) {
+		t.Errorf("custom_fields sent = %+v, want [%+v]", gotBody.Issue.CustomFields, want)
+	}
+}
+
+func TestCreateIssueSendsMultiValueCustomFieldAsArray(t *testing.T) {
+	var gotBody struct {
+		Issue struct {
+			CustomFields []json.RawMessage `json:"custom_fields"`
+		} `json:"issue"`
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(issueResponse{Issue: Issue{ID: 1}})
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, "test-key")
+	_, err := client.CreateIssue(CreateIssueRequest{
+		ProjectID:    "1",
+		Subject:      "test",
+		CustomFields: []CustomField{{ID: 11, Values: []string{"16", "27"}}},
+	})
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	if len(gotBody.Issue.CustomFields) != 1 {
+		t.Fatalf("got %d custom fields, want 1", len(gotBody.Issue.CustomFields))
+	}
+	var wire struct {
+		ID    int      `json:"id"`
+		Value []string `json:"value"`
+	}
+	if err := json.Unmarshal(gotBody.Issue.CustomFields[0], &wire); err != nil {
+		t.Fatalf("custom field sent wasn't a JSON array: %s (%v)", gotBody.Issue.CustomFields[0], err)
+	}
+	if wire.ID != 11 || !reflect.DeepEqual(wire.Value, []string{"16", "27"}) {
+		t.Errorf("custom field sent = %+v, want {ID:11 Value:[16 27]}", wire)
 	}
 }
 
@@ -265,7 +304,7 @@ func TestGetIssueParsesMultiValueCustomFields(t *testing.T) {
 		t.Fatalf("got %d custom fields, want %d", len(issue.CustomFields), len(want))
 	}
 	for i, f := range issue.CustomFields {
-		if f != want[i] {
+		if !reflect.DeepEqual(f, want[i]) {
 			t.Errorf("field %d = %+v, want %+v", i, f, want[i])
 		}
 	}
