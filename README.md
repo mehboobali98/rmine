@@ -78,7 +78,7 @@ Every command accepts `-o json` for scripting-friendly output, and `--profile <n
 
 Assignees are set/filtered by numeric Redmine user ID (or the literal `me`); looking other users up by name isn't in scope yet.
 
-Custom fields differ per Redmine instance (and sometimes per project/tracker), so they're set generically by numeric ID: `--field 12=staging`, repeatable for multiple fields. Find a field's ID by inspecting an existing issue that has it set: `rmine issue view <id> -o json`.
+Custom fields differ per Redmine instance (and sometimes per project/tracker), so they're set generically by numeric ID: `--field 12=staging`, repeatable to set several distinct fields. Passing the same ID more than once (`--field 11=16 --field 11=27`) instead sets that one field to multiple values, for checkbox/multi-select fields. Find a field's ID by inspecting an existing issue that has it set: `rmine issue view <id> -o json`.
 
 `--category` is project-specific and matched case-insensitively by name; list a project's valid categories with `rmine project categories <project>`.
 

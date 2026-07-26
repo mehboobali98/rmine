@@ -420,8 +420,13 @@ func resolveProjectFilter(client *redmine.Client, project string) (string, error
 // field updates. IDs (not names) are required: custom field definitions are
 // per-instance and Redmine's enumeration endpoint for them is admin-only, so
 // there's no reliable way to resolve a name to an ID for every server.
+//
+// Passing the same ID more than once collects the values into one
+// multi-value field (Redmine requires an array to set 2+ options on a
+// checkbox/multi-select field), e.g. --field 11=16 --field 11=27.
 func parseCustomFields(raw []string) ([]redmine.CustomField, error) {
-	fields := make([]redmine.CustomField, 0, len(raw))
+	order := make([]int, 0, len(raw))
+	values := make(map[int][]string, len(raw))
 	for _, kv := range raw {
 		idStr, value, ok := strings.Cut(kv, "=")
 		if !ok {
@@ -431,7 +436,20 @@ func parseCustomFields(raw []string) ([]redmine.CustomField, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid --field %q: id must be numeric", kv)
 		}
-		fields = append(fields, redmine.CustomField{ID: id, Value: redmine.FieldValue(value)})
+		if _, seen := values[id]; !seen {
+			order = append(order, id)
+		}
+		values[id] = append(values[id], value)
+	}
+
+	fields := make([]redmine.CustomField, 0, len(order))
+	for _, id := range order {
+		vs := values[id]
+		if len(vs) == 1 {
+			fields = append(fields, redmine.CustomField{ID: id, Value: redmine.FieldValue(vs[0])})
+		} else {
+			fields = append(fields, redmine.CustomField{ID: id, Values: vs})
+		}
 	}
 	return fields, nil
 }
