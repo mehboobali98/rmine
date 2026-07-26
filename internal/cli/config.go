@@ -22,7 +22,10 @@ var configInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Set up the default profile",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return addProfile("default", true)
+		if err := addProfile("default", true); err != nil {
+			return err
+		}
+		return promptInstallSkill()
 	},
 }
 

@@ -178,7 +178,7 @@ var timeDeleteCmd = &cobra.Command{
 		}
 		force, _ := cmd.Flags().GetBool("force")
 
-		if !force && !confirm(fmt.Sprintf("Delete time entry #%d?", id)) {
+		if !force && !confirm(fmt.Sprintf("Delete time entry #%d?", id), false) {
 			fmt.Println("Aborted.")
 			return nil
 		}
@@ -221,11 +221,19 @@ func init() {
 	rootCmd.AddCommand(timeCmd)
 }
 
-// confirm asks a yes/no question on stdin, defaulting to "no".
-func confirm(prompt string) bool {
-	fmt.Printf("%s [y/N] ", prompt)
+// confirm asks a yes/no question on stdin. defaultYes controls what
+// pressing enter with no answer means.
+func confirm(prompt string, defaultYes bool) bool {
+	hint := "[y/N]"
+	if defaultYes {
+		hint = "[Y/n]"
+	}
+	fmt.Printf("%s %s ", prompt, hint)
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')
 	answer = strings.ToLower(strings.TrimSpace(answer))
+	if answer == "" {
+		return defaultYes
+	}
 	return answer == "y" || answer == "yes"
 }
