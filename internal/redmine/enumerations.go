@@ -1,6 +1,9 @@
 package redmine
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // IssueStatus is a Redmine issue status, including whether it's a "closed" state.
 type IssueStatus struct {
@@ -56,7 +59,7 @@ func (c *Client) ListTimeEntryActivities() ([]IDName, error) {
 
 func findIDByName(items []IDName, name string) (int, error) {
 	for _, item := range items {
-		if item.Name == name {
+		if strings.EqualFold(item.Name, name) {
 			return item.ID, nil
 		}
 	}
@@ -109,7 +112,7 @@ func (c *Client) ResolveIssueStatusID(name string) (int, error) {
 		return 0, err
 	}
 	for _, s := range statuses {
-		if s.Name == name {
+		if strings.EqualFold(s.Name, name) {
 			return s.ID, nil
 		}
 	}

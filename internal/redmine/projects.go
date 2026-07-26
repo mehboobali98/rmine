@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // Project is a Redmine project.
@@ -56,4 +57,46 @@ func (c *Client) GetProject(idOrIdentifier string) (*Project, error) {
 		return nil, err
 	}
 	return &resp.Project, nil
+}
+
+// ResolveProjectID resolves a project's display name or identifier, matched
+// case-insensitively, to its numeric ID.
+func (c *Client) ResolveProjectID(name string) (int, error) {
+	projects, err := c.ListProjects()
+	if err != nil {
+		return 0, err
+	}
+	for _, p := range projects {
+		if strings.EqualFold(p.Name, name) || strings.EqualFold(p.Identifier, name) {
+			return p.ID, nil
+		}
+	}
+	return 0, fmt.Errorf("project: no match for %q", name)
+}
+
+// ListIssueCategories returns the issue categories defined on one project.
+// Categories are project-specific, unlike trackers/statuses/priorities which
+// are shared server-wide.
+func (c *Client) ListIssueCategories(projectIDOrIdentifier string) ([]IDName, error) {
+	var resp struct {
+		IssueCategories []IDName `json:"issue_categories"`
+	}
+	if err := c.get(fmt.Sprintf("/projects/%s/issue_categories.json", projectIDOrIdentifier), nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.IssueCategories, nil
+}
+
+// ResolveIssueCategoryID resolves a category name, matched case-insensitively,
+// to its numeric ID within the given project.
+func (c *Client) ResolveIssueCategoryID(projectIDOrIdentifier, name string) (int, error) {
+	categories, err := c.ListIssueCategories(projectIDOrIdentifier)
+	if err != nil {
+		return 0, err
+	}
+	id, err := findIDByName(categories, name)
+	if err != nil {
+		return 0, fmt.Errorf("category: %w", err)
+	}
+	return id, nil
 }

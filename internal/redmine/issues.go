@@ -1,25 +1,62 @@
 package redmine
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // Issue is a Redmine issue.
 type Issue struct {
-	ID          int       `json:"id"`
-	Project     IDName    `json:"project"`
-	Tracker     IDName    `json:"tracker"`
-	Status      IDName    `json:"status"`
-	Priority    IDName    `json:"priority"`
-	Author      IDName    `json:"author"`
-	AssignedTo  *IDName   `json:"assigned_to"`
-	Subject     string    `json:"subject"`
-	Description string    `json:"description"`
-	CreatedOn   time.Time `json:"created_on"`
-	UpdatedOn   time.Time `json:"updated_on"`
+	ID           int           `json:"id"`
+	Project      IDName        `json:"project"`
+	Tracker      IDName        `json:"tracker"`
+	Status       IDName        `json:"status"`
+	Priority     IDName        `json:"priority"`
+	Author       IDName        `json:"author"`
+	AssignedTo   *IDName       `json:"assigned_to"`
+	Subject      string        `json:"subject"`
+	Description  string        `json:"description"`
+	Category     *IDName       `json:"category,omitempty"`
+	CustomFields []CustomField `json:"custom_fields,omitempty"`
+	CreatedOn    time.Time     `json:"created_on"`
+	UpdatedOn    time.Time     `json:"updated_on"`
+}
+
+// CustomField is one value of an issue's custom fields, which are defined
+// per Redmine instance (and sometimes per project/tracker) by each server's
+// admin and can't be known ahead of time. Name is populated by Redmine on
+// read; set fields by ID on write — find the ID for a field by inspecting
+// an existing issue via `rmine issue view <id> -o json`.
+type CustomField struct {
+	ID    int        `json:"id"`
+	Name  string     `json:"name,omitempty"`
+	Value FieldValue `json:"value"`
+}
+
+// FieldValue is a custom field's value. Redmine encodes single-value fields
+// as a JSON string but multi-value fields (checkboxes, multi-selects) as a
+// JSON array of strings; both unmarshal here as one string, joined with
+// ", " in the multi-value case. Values sent back to Redmine are always a
+// single string — setting a multi-value field via --field replaces it with
+// one value.
+type FieldValue string
+
+func (v *FieldValue) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*v = FieldValue(s)
+		return nil
+	}
+	var list []string
+	if err := json.Unmarshal(data, &list); err != nil {
+		return fmt.Errorf("custom field value is neither a string nor a string array: %w", err)
+	}
+	*v = FieldValue(strings.Join(list, ", "))
+	return nil
 }
 
 // IssueListFilter narrows a `rmine issue list` query. Empty fields are omitted.
@@ -31,6 +68,8 @@ type IssueListFilter struct {
 	Subject       string // substring match against the issue subject
 	UpdatedAfter  string // YYYY-MM-DD
 	UpdatedBefore string // YYYY-MM-DD
+	DueAfter      string // YYYY-MM-DD
+	DueBefore     string // YYYY-MM-DD
 	Limit         int    // 0 means "use Redmine's default page size"
 	All           bool   // ignore Limit and fetch every matching issue
 }
@@ -86,6 +125,14 @@ func buildAdvancedIssueFilter(f IssueListFilter) url.Values {
 	case f.UpdatedBefore != "":
 		addField("updated_on", "<=", f.UpdatedBefore)
 	}
+	switch {
+	case f.DueAfter != "" && f.DueBefore != "":
+		addField("due_date", "><", f.DueAfter, f.DueBefore)
+	case f.DueAfter != "":
+		addField("due_date", ">=", f.DueAfter)
+	case f.DueBefore != "":
+		addField("due_date", "<=", f.DueBefore)
+	}
 	if f.Subject != "" {
 		addField("subject", "~", f.Subject)
 	}
@@ -122,6 +169,9 @@ func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 		}
 		if f.UpdatedAfter != "" || f.UpdatedBefore != "" {
 			base.Set("updated_on", dateRangeFilter(f.UpdatedAfter, f.UpdatedBefore))
+		}
+		if f.DueAfter != "" || f.DueBefore != "" {
+			base.Set("due_date", dateRangeFilter(f.DueAfter, f.DueBefore))
 		}
 	}
 
@@ -177,23 +227,27 @@ func (c *Client) GetIssue(id int) (*Issue, error) {
 // CreateIssueRequest describes a new issue. Project and Subject are required
 // by Redmine; the rest are optional and omitted from the request when zero.
 type CreateIssueRequest struct {
-	ProjectID   string
-	Subject     string
-	Description string
-	TrackerID   int
-	PriorityID  int
-	AssignedTo  int
+	ProjectID    string
+	Subject      string
+	Description  string
+	TrackerID    int
+	PriorityID   int
+	AssignedTo   int
+	CategoryID   int
+	CustomFields []CustomField
 }
 
 type issueFields struct {
-	ProjectID   string `json:"project_id,omitempty"`
-	Subject     string `json:"subject,omitempty"`
-	Description string `json:"description,omitempty"`
-	TrackerID   int    `json:"tracker_id,omitempty"`
-	PriorityID  int    `json:"priority_id,omitempty"`
-	AssignedTo  int    `json:"assigned_to_id,omitempty"`
-	StatusID    int    `json:"status_id,omitempty"`
-	Notes       string `json:"notes,omitempty"`
+	ProjectID    string        `json:"project_id,omitempty"`
+	Subject      string        `json:"subject,omitempty"`
+	Description  string        `json:"description,omitempty"`
+	TrackerID    int           `json:"tracker_id,omitempty"`
+	PriorityID   int           `json:"priority_id,omitempty"`
+	AssignedTo   int           `json:"assigned_to_id,omitempty"`
+	StatusID     int           `json:"status_id,omitempty"`
+	CategoryID   int           `json:"category_id,omitempty"`
+	Notes        string        `json:"notes,omitempty"`
+	CustomFields []CustomField `json:"custom_fields,omitempty"`
 }
 
 // CreateIssue creates a new issue and returns it as stored by Redmine.
@@ -202,12 +256,14 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 		Issue issueFields `json:"issue"`
 	}{
 		Issue: issueFields{
-			ProjectID:   req.ProjectID,
-			Subject:     req.Subject,
-			Description: req.Description,
-			TrackerID:   req.TrackerID,
-			PriorityID:  req.PriorityID,
-			AssignedTo:  req.AssignedTo,
+			ProjectID:    req.ProjectID,
+			Subject:      req.Subject,
+			Description:  req.Description,
+			TrackerID:    req.TrackerID,
+			PriorityID:   req.PriorityID,
+			AssignedTo:   req.AssignedTo,
+			CategoryID:   req.CategoryID,
+			CustomFields: req.CustomFields,
 		},
 	}
 
@@ -221,12 +277,14 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 // UpdateIssueRequest describes an edit to an existing issue. Zero-value
 // fields are left unchanged on the server.
 type UpdateIssueRequest struct {
-	Subject     string
-	Description string
-	TrackerID   int
-	PriorityID  int
-	AssignedTo  int
-	StatusID    int
+	Subject      string
+	Description  string
+	TrackerID    int
+	PriorityID   int
+	AssignedTo   int
+	StatusID     int
+	CategoryID   int
+	CustomFields []CustomField
 }
 
 // UpdateIssue applies a partial update to an issue.
@@ -235,12 +293,14 @@ func (c *Client) UpdateIssue(id int, req UpdateIssueRequest) error {
 		Issue issueFields `json:"issue"`
 	}{
 		Issue: issueFields{
-			Subject:     req.Subject,
-			Description: req.Description,
-			TrackerID:   req.TrackerID,
-			PriorityID:  req.PriorityID,
-			AssignedTo:  req.AssignedTo,
-			StatusID:    req.StatusID,
+			Subject:      req.Subject,
+			Description:  req.Description,
+			TrackerID:    req.TrackerID,
+			PriorityID:   req.PriorityID,
+			AssignedTo:   req.AssignedTo,
+			StatusID:     req.StatusID,
+			CategoryID:   req.CategoryID,
+			CustomFields: req.CustomFields,
 		},
 	}
 	return c.put(fmt.Sprintf("/issues/%d.json", id), body)

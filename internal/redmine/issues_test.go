@@ -127,6 +127,30 @@ func TestListIssuesAppliesAssigneeAndDateFilters(t *testing.T) {
 	}
 }
 
+func TestListIssuesAppliesDueDateRange(t *testing.T) {
+	var gotDueDate string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotDueDate = r.URL.Query().Get("due_date")
+		resp := issueListResponse{Issues: []Issue{{ID: 1}}, TotalCount: 1}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, "test-key")
+	_, err := client.ListIssues(IssueListFilter{
+		DueAfter:  "2026-07-24",
+		DueBefore: "2026-07-31",
+	})
+	if err != nil {
+		t.Fatalf("ListIssues: %v", err)
+	}
+	if want := "><2026-07-24|2026-07-31"; gotDueDate != want {
+		t.Errorf("due_date = %q, want %q", gotDueDate, want)
+	}
+}
+
 func TestListIssuesRespectsLimit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := issueListResponse{
@@ -182,6 +206,68 @@ func TestCreateIssueSurfacesValidationErrors(t *testing.T) {
 	}
 	if got := err.Error(); got == "" {
 		t.Fatal("expected non-empty error message")
+	}
+}
+
+func TestCreateIssueSendsCustomFields(t *testing.T) {
+	var gotBody struct {
+		Issue struct {
+			CustomFields []CustomField `json:"custom_fields"`
+		} `json:"issue"`
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(issueResponse{Issue: Issue{ID: 1}})
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, "test-key")
+	_, err := client.CreateIssue(CreateIssueRequest{
+		ProjectID:    "1",
+		Subject:      "test",
+		CustomFields: []CustomField{{ID: 12, Value: "staging"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	if len(gotBody.Issue.CustomFields) != 1 || gotBody.Issue.CustomFields[0] != (CustomField{ID: 12, Value: "staging"}) {
+		t.Errorf("custom_fields sent = %+v, want [{12 staging}]", gotBody.Issue.CustomFields)
+	}
+}
+
+func TestGetIssueParsesMultiValueCustomFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"issue": map[string]any{
+				"id": 1,
+				"custom_fields": []map[string]any{
+					{"id": 12, "name": "Environment", "value": "staging"},
+					{"id": 13, "name": "Affected Systems", "value": []string{"web", "db"}},
+					{"id": 14, "name": "Unset Multi-Select", "value": []string{}},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, "test-key")
+	issue, err := client.GetIssue(1)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	want := []CustomField{
+		{ID: 12, Name: "Environment", Value: "staging"},
+		{ID: 13, Name: "Affected Systems", Value: "web, db"},
+		{ID: 14, Name: "Unset Multi-Select", Value: ""},
+	}
+	if len(issue.CustomFields) != len(want) {
+		t.Fatalf("got %d custom fields, want %d", len(issue.CustomFields), len(want))
+	}
+	for i, f := range issue.CustomFields {
+		if f != want[i] {
+			t.Errorf("field %d = %+v, want %+v", i, f, want[i])
+		}
 	}
 }
 

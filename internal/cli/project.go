@@ -64,7 +64,38 @@ var projectViewCmd = &cobra.Command{
 	},
 }
 
+var projectCategoriesCmd = &cobra.Command{
+	Use:   "categories <project>",
+	Short: "List a project's issue categories",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := newClient()
+		if err != nil {
+			return err
+		}
+		project, err := resolveProjectFilter(client, args[0])
+		if err != nil {
+			return err
+		}
+		categories, err := client.ListIssueCategories(project)
+		if err != nil {
+			return err
+		}
+
+		if wantsJSON() {
+			return printJSON(categories)
+		}
+
+		rows := make([][]string, 0, len(categories))
+		for _, c := range categories {
+			rows = append(rows, []string{strconv.Itoa(c.ID), c.Name})
+		}
+		printTable([]string{"ID", "NAME"}, rows)
+		return nil
+	},
+}
+
 func init() {
-	projectCmd.AddCommand(projectListCmd, projectViewCmd)
+	projectCmd.AddCommand(projectListCmd, projectViewCmd, projectCategoriesCmd)
 	rootCmd.AddCommand(projectCmd)
 }

@@ -37,6 +37,65 @@ func TestListProjectsPagesThroughResults(t *testing.T) {
 	}
 }
 
+func TestResolveProjectIDMatchesNameOrIdentifierCaseInsensitively(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := projectListResponse{
+			Projects: []Project{
+				{ID: 7, Name: "AssetSonar Scrum Team", Identifier: "assetsonar-scrum"},
+			},
+			TotalCount: 1,
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+	client := New(srv.URL, "test-key")
+
+	for _, in := range []string{"assetsonar scrum team", "AssetSonar Scrum Team", "assetsonar-scrum", "ASSETSONAR-SCRUM"} {
+		id, err := client.ResolveProjectID(in)
+		if err != nil {
+			t.Errorf("ResolveProjectID(%q): %v", in, err)
+			continue
+		}
+		if id != 7 {
+			t.Errorf("ResolveProjectID(%q) = %d, want 7", in, id)
+		}
+	}
+
+	if _, err := client.ResolveProjectID("no such project"); err == nil {
+		t.Error("expected an error for an unknown project")
+	}
+}
+
+func TestResolveIssueCategoryIDMatchesNameCaseInsensitively(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewEncoder(w).Encode(map[string]any{
+			"issue_categories": []map[string]any{
+				{"id": 11, "name": "Functional"},
+				{"id": 28, "name": "Bug"},
+			},
+		})
+	}))
+	defer srv.Close()
+	client := New(srv.URL, "test-key")
+
+	id, err := client.ResolveIssueCategoryID("2", "functional")
+	if err != nil {
+		t.Fatalf("ResolveIssueCategoryID: %v", err)
+	}
+	if id != 11 {
+		t.Errorf("ResolveIssueCategoryID(...) = %d, want 11", id)
+	}
+	if gotPath != "/projects/2/issue_categories.json" {
+		t.Errorf("path = %q, want /projects/2/issue_categories.json", gotPath)
+	}
+
+	if _, err := client.ResolveIssueCategoryID("2", "no such category"); err == nil {
+		t.Error("expected an error for an unknown category")
+	}
+}
+
 func TestGetProjectByIdentifier(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/projects/my-project.json" {
