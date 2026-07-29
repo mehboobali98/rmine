@@ -180,7 +180,7 @@ func TestGetIssueSurfacesAPIError(t *testing.T) {
 	defer srv.Close()
 
 	client := New(srv.URL, "test-key")
-	_, err := client.GetIssue(999)
+	_, err := client.GetIssue(999, false)
 	if err == nil {
 		t.Fatal("expected an error for 404 response")
 	}
@@ -291,7 +291,7 @@ func TestGetIssueParsesMultiValueCustomFields(t *testing.T) {
 	defer srv.Close()
 
 	client := New(srv.URL, "test-key")
-	issue, err := client.GetIssue(1)
+	issue, err := client.GetIssue(1, false)
 	if err != nil {
 		t.Fatalf("GetIssue: %v", err)
 	}

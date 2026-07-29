@@ -64,7 +64,8 @@ rmine config list-profiles
 | `rmine project list` / `view <id>` | Browse projects |
 | `rmine project categories <project>` | List a project's issue categories |
 | `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--limit`, `--all`) |
-| `rmine issue view <id>` | Show issue details |
+| `rmine issue view <id>` | Show issue details and attachments (`--comments` to also fetch comments) |
+| `rmine issue attachments <id>` | List an issue's attachments (`--download <dir>` to save them all) |
 | `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--field`) |
 | `rmine issue update <id>` | Edit an issue (`--subject`, `--description`, `--tracker`, `--priority`, `--status`, `--category`, `--assignee`, `--field`) |
 | `rmine issue close <id>` | Close an issue (`--status` to pick a specific closed status) |

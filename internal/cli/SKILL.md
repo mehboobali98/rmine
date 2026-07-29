@@ -87,6 +87,25 @@ filter syntax under the hood, which does **not** default to open-only —
 expect closed issues in results too unless you also pass `--status open`.
 `--limit` defaults to 25; pass `--all` to fetch every matching result instead.
 
+## Attachments and comments
+
+`rmine issue view <id>` always carries the issue's **attachments** (id,
+filename, content type, size). **Comments** are extra — a long issue's history
+dwarfs the issue itself — so pass `--comments` when you need them. In `-o json`
+they land under `attachments` and `journals`; a journal with empty `notes` is a
+bare field change, not a comment, and is worth skipping.
+
+`rmine issue attachments <id>` lists them on their own. `--download <dir>`
+writes every attachment into that directory, creating it if needed:
+
+```sh
+rmine issue attachments 54039 --download ./spec
+```
+
+Use that when the real content lives in an attached document rather than in the
+issue description. A failed download removes its partial file rather than
+leaving a truncated one behind.
+
 ## Time entries
 
 `rmine time log <issue-id> --hours <n> [--date YYYY-MM-DD] [--activity
@@ -103,7 +122,8 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine project list` / `view <id>` | Browse projects |
 | `rmine project categories <project>` | List a project's issue categories |
 | `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after/-before`, `--due-after/-before`, `--due-within`, `--due-next-week`, `--limit`, `--all` |
-| `rmine issue view <id>` | Full issue detail, including custom fields |
+| `rmine issue view <id>` | Full issue detail, custom fields, and attachments; `--comments` to also fetch comments |
+| `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
 | `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--field` |
 | `rmine issue update <id>` | Same optional flags as create, plus `--status` |
 | `rmine issue close <id>` | `--status` to pick a specific closed status |
