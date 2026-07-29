@@ -102,6 +102,32 @@ func (c *Client) get(path string, query url.Values, out any) error {
 	return c.do(http.MethodGet, path, query, nil, out)
 }
 
+// Download streams an attachment's content to w. contentURL is the absolute
+// URL Redmine puts in an attachment's content_url field. This can't reuse
+// do(), which asks for JSON and unmarshals the whole body — attachments are
+// arbitrary bytes and large enough that buffering them all is wasteful.
+func (c *Client) Download(contentURL string, w io.Writer) error {
+	req, err := http.NewRequest(http.MethodGet, contentURL, nil)
+	if err != nil {
+		return fmt.Errorf("building request: %w", err)
+	}
+	req.Header.Set("X-Redmine-API-Key", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("calling redmine: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return &APIError{StatusCode: resp.StatusCode}
+	}
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		return fmt.Errorf("downloading attachment: %w", err)
+	}
+	return nil
+}
+
 func (c *Client) post(path string, body, out any) error {
 	return c.do(http.MethodPost, path, nil, body, out)
 }

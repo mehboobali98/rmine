@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -99,11 +101,12 @@ var issueViewCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		comments, _ := cmd.Flags().GetBool("comments")
 		client, err := newClient()
 		if err != nil {
 			return err
 		}
-		issue, err := client.GetIssue(id)
+		issue, err := client.GetIssue(id, comments)
 		if err != nil {
 			return err
 		}
@@ -127,8 +130,92 @@ var issueViewCmd = &cobra.Command{
 		if issue.Description != "" {
 			fmt.Printf("\n%s\n", issue.Description)
 		}
+		if len(issue.Attachments) > 0 {
+			fmt.Printf("\nAttachments:\n")
+			for _, a := range issue.Attachments {
+				fmt.Printf("  [%d] %s (%s, %d bytes)\n", a.ID, a.Filename, a.ContentType, a.Filesize)
+			}
+		}
+		for _, j := range issue.Journals {
+			if j.Notes == "" {
+				continue // a bare field change, not a comment
+			}
+			fmt.Printf("\n--- %s, %s ---\n%s\n", j.User.Name, j.CreatedOn.Format("2006-01-02 15:04"), j.Notes)
+		}
 		return nil
 	},
+}
+
+var issueAttachmentsCmd = &cobra.Command{
+	Use:   "attachments <id>",
+	Short: "List an issue's attachments, optionally downloading them",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseIssueID(args[0])
+		if err != nil {
+			return err
+		}
+		dir, _ := cmd.Flags().GetString("download")
+		client, err := newClient()
+		if err != nil {
+			return err
+		}
+		issue, err := client.GetIssue(id, false)
+		if err != nil {
+			return err
+		}
+
+		if dir != "" {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return fmt.Errorf("creating download directory: %w", err)
+			}
+			for _, a := range issue.Attachments {
+				path := filepath.Join(dir, filepath.Base(a.Filename))
+				if err := downloadTo(client, a.ContentURL, path); err != nil {
+					return fmt.Errorf("downloading %s: %w", a.Filename, err)
+				}
+				fmt.Printf("Downloaded %s\n", path)
+			}
+			if len(issue.Attachments) == 0 {
+				fmt.Printf("Issue #%d has no attachments\n", id)
+			}
+			return nil
+		}
+
+		if wantsJSON() {
+			return printJSON(issue.Attachments)
+		}
+		if len(issue.Attachments) == 0 {
+			fmt.Printf("Issue #%d has no attachments\n", id)
+			return nil
+		}
+		rows := make([][]string, 0, len(issue.Attachments))
+		for _, a := range issue.Attachments {
+			rows = append(rows, []string{
+				strconv.Itoa(a.ID),
+				a.Filename,
+				a.ContentType,
+				strconv.Itoa(a.Filesize),
+			})
+		}
+		printTable([]string{"ID", "FILENAME", "TYPE", "BYTES"}, rows)
+		return nil
+	},
+}
+
+// downloadTo streams one attachment to path, making sure a failed download
+// doesn't leave a half-written file behind for a caller to parse as a spec.
+func downloadTo(client *redmine.Client, contentURL, path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	if err := client.Download(contentURL, f); err != nil {
+		f.Close()
+		os.Remove(path)
+		return err
+	}
+	return f.Close()
 }
 
 var issueCreateCmd = &cobra.Command{
@@ -252,7 +339,7 @@ var issueUpdateCmd = &cobra.Command{
 			}
 		}
 		if categoryName != "" {
-			issue, err := client.GetIssue(id)
+			issue, err := client.GetIssue(id, false)
 			if err != nil {
 				return err
 			}
@@ -362,7 +449,11 @@ func init() {
 
 	issueCloseCmd.Flags().String("status", "", "status name to close with (defaults to the server's first closed status)")
 
-	issueCmd.AddCommand(issueListCmd, issueViewCmd, issueCreateCmd, issueUpdateCmd, issueCloseCmd, issueCommentCmd)
+	issueViewCmd.Flags().Bool("comments", false, "also fetch and show the issue's comments")
+
+	issueAttachmentsCmd.Flags().String("download", "", "download every attachment into this directory")
+
+	issueCmd.AddCommand(issueListCmd, issueViewCmd, issueAttachmentsCmd, issueCreateCmd, issueUpdateCmd, issueCloseCmd, issueCommentCmd)
 	rootCmd.AddCommand(issueCmd)
 }
 

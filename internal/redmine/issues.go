@@ -22,8 +22,33 @@ type Issue struct {
 	Description  string        `json:"description"`
 	Category     *IDName       `json:"category,omitempty"`
 	CustomFields []CustomField `json:"custom_fields,omitempty"`
+	Attachments  []Attachment  `json:"attachments,omitempty"`
+	Journals     []Journal     `json:"journals,omitempty"`
 	CreatedOn    time.Time     `json:"created_on"`
 	UpdatedOn    time.Time     `json:"updated_on"`
+}
+
+// Attachment is a file attached to an issue. ContentURL is an absolute URL on
+// the same server; fetch it with Client.Download.
+type Attachment struct {
+	ID          int       `json:"id"`
+	Filename    string    `json:"filename"`
+	Filesize    int       `json:"filesize"`
+	ContentType string    `json:"content_type"`
+	Description string    `json:"description"`
+	ContentURL  string    `json:"content_url"`
+	Author      IDName    `json:"author"`
+	CreatedOn   time.Time `json:"created_on"`
+}
+
+// Journal is one entry in an issue's history. Redmine records field changes
+// and comments in the same list, so an entry with empty Notes is a bare field
+// change with nothing a reader would call a comment.
+type Journal struct {
+	ID        int       `json:"id"`
+	User      IDName    `json:"user"`
+	Notes     string    `json:"notes"`
+	CreatedOn time.Time `json:"created_on"`
 }
 
 // CustomField is one value of an issue's custom fields, which are defined
@@ -247,10 +272,19 @@ func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 	return all, nil
 }
 
-// GetIssue fetches a single issue by ID.
-func (c *Client) GetIssue(id int) (*Issue, error) {
+// GetIssue fetches a single issue by ID. Attachments always come along — they
+// are a handful of small keys. Comments (Redmine calls them journals) only
+// when asked: a long-running issue's history is far bigger than the issue
+// itself, and most callers don't want it.
+func (c *Client) GetIssue(id int, withComments bool) (*Issue, error) {
+	includes := "attachments"
+	if withComments {
+		includes += ",journals"
+	}
+	query := url.Values{"include": {includes}}
+
 	var resp issueResponse
-	if err := c.get(fmt.Sprintf("/issues/%d.json", id), nil, &resp); err != nil {
+	if err := c.get(fmt.Sprintf("/issues/%d.json", id), query, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Issue, nil
