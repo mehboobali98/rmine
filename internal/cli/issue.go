@@ -229,6 +229,7 @@ var issueCreateCmd = &cobra.Command{
 		priorityName, _ := cmd.Flags().GetString("priority")
 		categoryName, _ := cmd.Flags().GetString("category")
 		assignee, _ := cmd.Flags().GetInt("assignee")
+		parent, _ := cmd.Flags().GetInt("parent")
 		fieldArgs, _ := cmd.Flags().GetStringArray("field")
 
 		customFields, err := parseCustomFields(fieldArgs)
@@ -251,6 +252,7 @@ var issueCreateCmd = &cobra.Command{
 			Subject:      subject,
 			Description:  description,
 			AssignedTo:   assignee,
+			ParentID:     parent,
 			CustomFields: customFields,
 		}
 		if trackerName != "" {
@@ -302,6 +304,7 @@ var issueUpdateCmd = &cobra.Command{
 		statusName, _ := cmd.Flags().GetString("status")
 		categoryName, _ := cmd.Flags().GetString("category")
 		assignee, _ := cmd.Flags().GetInt("assignee")
+		parent, _ := cmd.Flags().GetInt("parent")
 		fieldArgs, _ := cmd.Flags().GetStringArray("field")
 
 		customFields, err := parseCustomFields(fieldArgs)
@@ -318,6 +321,7 @@ var issueUpdateCmd = &cobra.Command{
 			Subject:      subject,
 			Description:  description,
 			AssignedTo:   assignee,
+			ParentID:     parent,
 			CustomFields: customFields,
 		}
 		if trackerName != "" {
@@ -434,6 +438,7 @@ func init() {
 	issueCreateCmd.Flags().String("priority", "", "priority name, e.g. High")
 	issueCreateCmd.Flags().String("category", "", "issue category name (project-specific; see `rmine project categories <project>`)")
 	issueCreateCmd.Flags().Int("assignee", 0, "assignee user ID")
+	issueCreateCmd.Flags().Int("parent", 0, "parent issue ID")
 	issueCreateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable); find IDs via `rmine issue view <id> -o json` on an existing issue")
 	_ = issueCreateCmd.MarkFlagRequired("project")
 	_ = issueCreateCmd.MarkFlagRequired("subject")
@@ -445,6 +450,7 @@ func init() {
 	issueUpdateCmd.Flags().String("status", "", "new status name")
 	issueUpdateCmd.Flags().String("category", "", "new category name (project-specific; see `rmine project categories <project>`)")
 	issueUpdateCmd.Flags().Int("assignee", 0, "new assignee user ID")
+	issueUpdateCmd.Flags().Int("parent", 0, "new parent issue ID")
 	issueUpdateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable)")
 
 	issueCloseCmd.Flags().String("status", "", "status name to close with (defaults to the server's first closed status)")
