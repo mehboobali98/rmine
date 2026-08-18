@@ -124,7 +124,7 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after/-before`, `--due-after/-before`, `--due-within`, `--due-next-week`, `--limit`, `--all` |
 | `rmine issue view <id>` | Full issue detail, custom fields, and attachments; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
-| `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--field` |
+| `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--field` |
 | `rmine issue update <id>` | Same optional flags as create, plus `--status` |
 | `rmine issue close <id>` | `--status` to pick a specific closed status |
 | `rmine issue comment <id> <note>` | Add a comment |
