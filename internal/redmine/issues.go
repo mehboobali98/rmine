@@ -300,6 +300,7 @@ type CreateIssueRequest struct {
 	PriorityID   int
 	AssignedTo   int
 	CategoryID   int
+	ParentID     int
 	CustomFields []CustomField
 }
 
@@ -312,6 +313,7 @@ type issueFields struct {
 	AssignedTo   int           `json:"assigned_to_id,omitempty"`
 	StatusID     int           `json:"status_id,omitempty"`
 	CategoryID   int           `json:"category_id,omitempty"`
+	ParentID     int           `json:"parent_issue_id,omitempty"`
 	Notes        string        `json:"notes,omitempty"`
 	CustomFields []CustomField `json:"custom_fields,omitempty"`
 }
@@ -329,6 +331,7 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 			PriorityID:   req.PriorityID,
 			AssignedTo:   req.AssignedTo,
 			CategoryID:   req.CategoryID,
+			ParentID:     req.ParentID,
 			CustomFields: req.CustomFields,
 		},
 	}
@@ -350,6 +353,7 @@ type UpdateIssueRequest struct {
 	AssignedTo   int
 	StatusID     int
 	CategoryID   int
+	ParentID     int
 	CustomFields []CustomField
 }
 
@@ -366,6 +370,7 @@ func (c *Client) UpdateIssue(id int, req UpdateIssueRequest) error {
 			AssignedTo:   req.AssignedTo,
 			StatusID:     req.StatusID,
 			CategoryID:   req.CategoryID,
+			ParentID:     req.ParentID,
 			CustomFields: req.CustomFields,
 		},
 	}

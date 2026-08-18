@@ -238,6 +238,33 @@ func TestCreateIssueSendsCustomFields(t *testing.T) {
 	}
 }
 
+func TestCreateIssueSendsParentID(t *testing.T) {
+	var gotBody struct {
+		Issue struct {
+			ParentID int `json:"parent_issue_id"`
+		} `json:"issue"`
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(issueResponse{Issue: Issue{ID: 1}})
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, "test-key")
+	_, err := client.CreateIssue(CreateIssueRequest{
+		ProjectID: "1",
+		Subject:   "test",
+		ParentID:  42,
+	})
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	if gotBody.Issue.ParentID != 42 {
+		t.Errorf("parent_issue_id sent = %d, want 42", gotBody.Issue.ParentID)
+	}
+}
+
 func TestCreateIssueSendsMultiValueCustomFieldAsArray(t *testing.T) {
 	var gotBody struct {
 		Issue struct {
