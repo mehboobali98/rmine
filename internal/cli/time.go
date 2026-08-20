@@ -84,6 +84,14 @@ var timeListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		user, err = resolveUserFilter("--user", user)
+		if err != nil {
+			return err
+		}
+		issue, err = resolveIDFilter("--issue", issue)
+		if err != nil {
+			return err
+		}
 
 		filter := redmine.TimeEntryListFilter{
 			IssueID:   issue,
@@ -201,7 +209,7 @@ func init() {
 
 	timeListCmd.Flags().String("issue", "", "filter by issue ID")
 	timeListCmd.Flags().String("project", "", "filter by project ID, identifier, or name")
-	timeListCmd.Flags().String("user", "", "filter by user ID")
+	timeListCmd.Flags().String("user", "", "filter by user ID (or \"me\" for the authenticated user)")
 	timeListCmd.Flags().String("from", "", "only entries spent on or after this date (YYYY-MM-DD)")
 	timeListCmd.Flags().String("to", "", "only entries spent on or before this date (YYYY-MM-DD)")
 	timeListCmd.Flags().Int("limit", 25, "maximum number of entries to return")

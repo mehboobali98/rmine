@@ -49,6 +49,14 @@ var issueListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		tracker, err = resolveTrackerFilter(client, tracker)
+		if err != nil {
+			return err
+		}
+		assignee, err = resolveUserFilter("--assignee", assignee)
+		if err != nil {
+			return err
+		}
 		dueAfter, dueBefore, err = resolveDueDateRange(time.Now(), dueAfter, dueBefore, dueWithin, dueNextWeek)
 		if err != nil {
 			return err
@@ -433,7 +441,7 @@ func init() {
 	issueListCmd.Flags().String("project", "", "filter by project ID, identifier, or name (e.g. \"AssetSonar Scrum Team\")")
 	issueListCmd.Flags().String("status", "", "filter by status name (e.g. In Progress), status ID, or open/closed/*")
 	issueListCmd.Flags().String("assignee", "", "filter by assignee user ID (or \"me\" for the authenticated user)")
-	issueListCmd.Flags().String("tracker", "", "filter by tracker ID")
+	issueListCmd.Flags().String("tracker", "", "filter by tracker name (e.g. Bug) or tracker ID")
 	issueListCmd.Flags().String("subject", "", "only issues whose subject contains this text")
 	issueListCmd.Flags().String("updated-after", "", "only issues updated on or after this date (YYYY-MM-DD)")
 	issueListCmd.Flags().String("updated-before", "", "only issues updated on or before this date (YYYY-MM-DD)")
@@ -507,6 +515,56 @@ func resolveStatusFilter(client *redmine.Client, status string) (string, error) 
 		return "", err
 	}
 	return strconv.Itoa(id), nil
+}
+
+// resolveTrackerFilter resolves a tracker name (e.g. "Bug") to its ID and
+// passes numeric IDs through unchanged.
+//
+// `issue create --tracker Bug` always took a name, while `issue list
+// --tracker` sent whatever it was given straight to Redmine as tracker_id.
+// Redmine casts a non-numeric tracker_id to 0, so the name spelling matched
+// nothing and returned an empty list with a 200 — the same answer as "no such
+// issues", with nothing to distinguish the two.
+func resolveTrackerFilter(client *redmine.Client, tracker string) (string, error) {
+	if tracker == "" {
+		return "", nil
+	}
+	if _, err := strconv.Atoi(tracker); err == nil {
+		return tracker, nil
+	}
+	id, err := client.ResolveTrackerID(tracker)
+	if err != nil {
+		return "", err
+	}
+	return strconv.Itoa(id), nil
+}
+
+// resolveUserFilter validates a user filter, which Redmine accepts only as a
+// numeric ID or the literal "me". rmine has no name-to-ID lookup, and passing
+// a name through would filter on a user_id of 0 and quietly return nothing,
+// so a name is rejected with an error that says as much rather than being
+// answered with a plausible-looking empty result.
+func resolveUserFilter(flag, value string) (string, error) {
+	if value == "" || value == "me" {
+		return value, nil
+	}
+	if _, err := strconv.Atoi(value); err == nil {
+		return value, nil
+	}
+	return "", fmt.Errorf("%s takes a numeric Redmine user ID or \"me\", not a name like %q — rmine cannot look users up by name", flag, value)
+}
+
+// resolveIDFilter validates a filter Redmine only accepts as a numeric ID,
+// for the same reason as resolveUserFilter: a non-numeric value is cast to 0
+// server-side and silently matches nothing.
+func resolveIDFilter(flag, value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	if _, err := strconv.Atoi(value); err == nil {
+		return value, nil
+	}
+	return "", fmt.Errorf("%s takes a numeric ID, got %q", flag, value)
 }
 
 // resolveProjectFilter passes numeric IDs through unchanged and resolves a
