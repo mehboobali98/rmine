@@ -162,8 +162,7 @@ var timeEditCmd = &cobra.Command{
 		if err := client.UpdateTimeEntry(id, req); err != nil {
 			return err
 		}
-		fmt.Printf("Updated time entry #%d\n", id)
-		return nil
+		return printAction(fmt.Sprintf("Updated time entry #%d", id), actionResult{Status: "updated", TimeEntry: id})
 	},
 }
 
@@ -179,8 +178,7 @@ var timeDeleteCmd = &cobra.Command{
 		force, _ := cmd.Flags().GetBool("force")
 
 		if !force && !confirm(fmt.Sprintf("Delete time entry #%d?", id), false) {
-			fmt.Println("Aborted.")
-			return nil
+			return printAction("Aborted.", actionResult{Status: "aborted", TimeEntry: id})
 		}
 
 		client, err := newClient()
@@ -190,8 +188,7 @@ var timeDeleteCmd = &cobra.Command{
 		if err := client.DeleteTimeEntry(id); err != nil {
 			return err
 		}
-		fmt.Printf("Deleted time entry #%d\n", id)
-		return nil
+		return printAction(fmt.Sprintf("Deleted time entry #%d", id), actionResult{Status: "deleted", TimeEntry: id})
 	},
 }
 
@@ -228,7 +225,7 @@ func confirm(prompt string, defaultYes bool) bool {
 	if defaultYes {
 		hint = "[Y/n]"
 	}
-	fmt.Printf("%s %s ", prompt, hint)
+	promptf("%s %s ", prompt, hint)
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')
 	answer = strings.ToLower(strings.TrimSpace(answer))
