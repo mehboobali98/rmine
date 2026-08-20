@@ -11,13 +11,26 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+// requestTimeout bounds every JSON call to Redmine. Without it a server that
+// accepts a connection and then stalls hangs the CLI — and any agent driving
+// it — indefinitely, with no output and no way to tell progress from a hang.
+const requestTimeout = 60 * time.Second
+
+// downloadHeaderTimeout bounds how long an attachment download may wait for
+// response headers. Downloads deliberately get no overall deadline instead: a
+// large attachment on a slow link is slow but healthy, and capping total
+// transfer time would abort it, while a stalled server never sends headers.
+const downloadHeaderTimeout = 30 * time.Second
 
 // Client talks to one Redmine server using API-key authentication.
 type Client struct {
-	baseURL string
-	apiKey  string
-	http    *http.Client
+	baseURL  string
+	apiKey   string
+	http     *http.Client
+	download *http.Client
 }
 
 // New builds a Client for the given Redmine base URL and API key.
@@ -25,7 +38,10 @@ func New(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
-		http:    &http.Client{},
+		http:    &http.Client{Timeout: requestTimeout},
+		download: &http.Client{
+			Transport: &http.Transport{ResponseHeaderTimeout: downloadHeaderTimeout},
+		},
 	}
 }
 
@@ -113,7 +129,7 @@ func (c *Client) Download(contentURL string, w io.Writer) error {
 	}
 	req.Header.Set("X-Redmine-API-Key", c.apiKey)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.download.Do(req)
 	if err != nil {
 		return fmt.Errorf("calling redmine: %w", err)
 	}
