@@ -25,8 +25,7 @@ var skillInstallCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Installed Claude Code skill to %s\n", path)
-		return nil
+		return printAction(fmt.Sprintf("Installed Claude Code skill to %s", path), actionResult{Status: "installed", Path: path})
 	},
 }
 
@@ -65,6 +64,5 @@ func promptInstallSkill() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Installed Claude Code skill to %s\n", path)
-	return nil
+	return printAction(fmt.Sprintf("Installed Claude Code skill to %s", path), actionResult{Status: "installed", Path: path})
 }

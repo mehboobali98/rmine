@@ -36,3 +36,35 @@ func printJSON(v any) error {
 	fmt.Println(string(data))
 	return nil
 }
+
+// actionResult is the JSON shape every mutating command emits under -o json.
+// One flat, predictable object beats each command inventing its own: a caller
+// can always read .status, and whichever id field is set names the thing that
+// was acted on.
+type actionResult struct {
+	Status    string `json:"status"`
+	Issue     int    `json:"issue,omitempty"`
+	TimeEntry int    `json:"time_entry,omitempty"`
+	Profile   string `json:"profile,omitempty"`
+	Path      string `json:"path,omitempty"`
+}
+
+// printAction reports a mutating command's outcome: a human sentence by
+// default, the same outcome as JSON under -o json. Both the README and the
+// skill file promise that every command accepts -o json, but the write
+// commands used to print prose either way, so a caller that passed the flag
+// uniformly got unparseable output back from half the CLI.
+func printAction(human string, result actionResult) error {
+	if wantsJSON() {
+		return printJSON(result)
+	}
+	fmt.Println(human)
+	return nil
+}
+
+// promptf writes an interactive prompt or progress note to stderr. These are
+// not results: routing them to stdout would interleave them with -o json
+// output and break the parse.
+func promptf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format, args...)
+}

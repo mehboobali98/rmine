@@ -169,14 +169,21 @@ var issueAttachmentsCmd = &cobra.Command{
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return fmt.Errorf("creating download directory: %w", err)
 			}
+			saved := make([]downloadedFile, 0, len(issue.Attachments))
 			for _, a := range issue.Attachments {
 				path := filepath.Join(dir, filepath.Base(a.Filename))
 				if err := downloadTo(client, a.ContentURL, path); err != nil {
 					return fmt.Errorf("downloading %s: %w", a.Filename, err)
 				}
-				fmt.Printf("Downloaded %s\n", path)
+				saved = append(saved, downloadedFile{ID: a.ID, Filename: a.Filename, Path: path})
+				if !wantsJSON() {
+					fmt.Printf("Downloaded %s\n", path)
+				}
 			}
-			if len(issue.Attachments) == 0 {
+			if wantsJSON() {
+				return printJSON(saved)
+			}
+			if len(saved) == 0 {
 				fmt.Printf("Issue #%d has no attachments\n", id)
 			}
 			return nil
@@ -201,6 +208,15 @@ var issueAttachmentsCmd = &cobra.Command{
 		printTable([]string{"ID", "FILENAME", "TYPE", "BYTES"}, rows)
 		return nil
 	},
+}
+
+// downloadFile is one attachment saved by `issue attachments --download`, so
+// that a -o json caller learns where each file landed rather than having to
+// re-derive the paths.
+type downloadedFile struct {
+	ID       int    `json:"id"`
+	Filename string `json:"filename"`
+	Path     string `json:"path"`
 }
 
 // downloadTo streams one attachment to path, making sure a failed download
@@ -356,8 +372,7 @@ var issueUpdateCmd = &cobra.Command{
 		if err := client.UpdateIssue(id, req); err != nil {
 			return err
 		}
-		fmt.Printf("Updated issue #%d\n", id)
-		return nil
+		return printAction(fmt.Sprintf("Updated issue #%d", id), actionResult{Status: "updated", Issue: id})
 	},
 }
 
@@ -390,8 +405,7 @@ var issueCloseCmd = &cobra.Command{
 		if err := client.UpdateIssue(id, redmine.UpdateIssueRequest{StatusID: statusID}); err != nil {
 			return err
 		}
-		fmt.Printf("Closed issue #%d\n", id)
-		return nil
+		return printAction(fmt.Sprintf("Closed issue #%d", id), actionResult{Status: "closed", Issue: id})
 	},
 }
 
@@ -411,8 +425,7 @@ var issueCommentCmd = &cobra.Command{
 		if err := client.AddNote(id, args[1]); err != nil {
 			return err
 		}
-		fmt.Printf("Commented on issue #%d\n", id)
-		return nil
+		return printAction(fmt.Sprintf("Commented on issue #%d", id), actionResult{Status: "commented", Issue: id})
 	},
 }
 
