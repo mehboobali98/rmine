@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,5 +142,72 @@ func TestParseCustomFieldsCombinesRepeatedIDIntoMultiValue(t *testing.T) {
 	want := []redmine.CustomField{{ID: 11, Values: []string{"16", "27"}}}
 	if !reflect.DeepEqual(fields, want) {
 		t.Errorf("fields = %+v, want %+v", fields, want)
+	}
+}
+
+func TestResolveTrackerFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"trackers": []map[string]any{
+				{"id": 1, "name": "Bug"},
+				{"id": 2, "name": "Feature"},
+			},
+		})
+	}))
+	defer srv.Close()
+	client := redmine.New(srv.URL, "test-key")
+
+	cases := []struct{ in, want string }{
+		{"", ""},
+		{"2", "2"},
+		{"Bug", "1"},
+		{"feature", "2"},
+	}
+	for _, c := range cases {
+		got, err := resolveTrackerFilter(client, c.in)
+		if err != nil {
+			t.Errorf("resolveTrackerFilter(%q): %v", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("resolveTrackerFilter(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+
+	// Previously this went to Redmine as tracker_id=NoSuchTracker, which
+	// matched nothing and returned an empty list with a 200.
+	if _, err := resolveTrackerFilter(client, "NoSuchTracker"); err == nil {
+		t.Error("expected an error for an unknown tracker name")
+	}
+}
+
+func TestResolveUserFilterRejectsNames(t *testing.T) {
+	for _, in := range []string{"", "me", "42"} {
+		got, err := resolveUserFilter("--assignee", in)
+		if err != nil {
+			t.Errorf("resolveUserFilter(%q): %v", in, err)
+			continue
+		}
+		if got != in {
+			t.Errorf("resolveUserFilter(%q) = %q, want it unchanged", in, got)
+		}
+	}
+
+	_, err := resolveUserFilter("--assignee", "Jane Doe")
+	if err == nil {
+		t.Fatal("expected an error for a user name")
+	}
+	if !strings.Contains(err.Error(), "--assignee") || !strings.Contains(err.Error(), "Jane Doe") {
+		t.Errorf("error should name the flag and the value, got: %v", err)
+	}
+}
+
+func TestResolveIDFilterRejectsNonNumeric(t *testing.T) {
+	got, err := resolveIDFilter("--issue", "1234")
+	if err != nil || got != "1234" {
+		t.Errorf("resolveIDFilter(1234) = %q, %v; want 1234, nil", got, err)
+	}
+	if _, err := resolveIDFilter("--issue", "CMDB-7"); err == nil {
+		t.Error("expected an error for a non-numeric issue filter")
 	}
 }
