@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/mehboobali98/rmine/internal/redmine"
@@ -54,5 +55,35 @@ func TestPrintJSONLeavesNonSlicesAlone(t *testing.T) {
 
 	if want := "{\n  \"id\": 1\n}\n"; out != want {
 		t.Errorf("printJSON(map) = %q, want %q", out, want)
+	}
+}
+
+func TestPrintTableFlattensMultiLineCells(t *testing.T) {
+	out := captureStdout(t, func() {
+		printTable(
+			[]string{"ID", "COMMENT"},
+			[][]string{
+				{"1", "first line\nsecond line"},
+				{"2", "has\ta tab"},
+				{"3", "windows\r\nnewline"},
+			},
+		)
+	})
+
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("got %d lines, want 4 (header + 3 rows):\n%s", len(lines), out)
+	}
+	for _, want := range []string{"first line second line", "has a tab", "windows newline"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing flattened cell %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestFlattenCellLeavesPlainTextUntouched(t *testing.T) {
+	const plain = "Fix the login redirect"
+	if got := flattenCell(plain); got != plain {
+		t.Errorf("flattenCell(%q) = %q, want it unchanged", plain, got)
 	}
 }

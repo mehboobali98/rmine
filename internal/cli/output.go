@@ -15,8 +15,29 @@ func printTable(headers []string, rows [][]string) {
 	defer w.Flush()
 	fmt.Fprintln(w, strings.Join(headers, "\t"))
 	for _, row := range rows {
-		fmt.Fprintln(w, strings.Join(row, "\t"))
+		cells := make([]string, len(row))
+		for i, cell := range row {
+			cells[i] = flattenCell(cell)
+		}
+		fmt.Fprintln(w, strings.Join(cells, "\t"))
 	}
+}
+
+// flattenCell collapses a value onto a single line. Issue subjects and time
+// entry comments routinely contain newlines, and one raw newline — or a tab,
+// which tabwriter reads as a column break — misaligns every row after it.
+func flattenCell(s string) string {
+	if !strings.ContainsAny(s, "\n\r\t") {
+		return s
+	}
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\r', '\t':
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // printJSON renders v as indented JSON for scripting use.
