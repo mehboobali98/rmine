@@ -115,11 +115,12 @@ var timeListCmd = &cobra.Command{
 			return err
 		}
 
+		projectArg := project
 		project, err = resolveProjectFilter(client, project)
 		if err != nil {
 			return err
 		}
-		user, err = resolveUserFilter(client, "--user", user, project)
+		user, err = resolveUserFilter(client, "--user", user, projectArg)
 		if err != nil {
 			return err
 		}

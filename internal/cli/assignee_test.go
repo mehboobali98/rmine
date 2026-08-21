@@ -124,3 +124,22 @@ func TestIssueListFiltersByAssigneeName(t *testing.T) {
 		t.Errorf("assigned_to_id = %q, want 3", gotAssignee)
 	}
 }
+
+// The user typed a project name; an error about it should use that name and
+// not the numeric id rmine resolved behind the scenes.
+func TestAssigneeLookupErrorNamesTheProjectAsTyped(t *testing.T) {
+	srv := assigneeServer(t, new(map[string]any))
+	defer srv.Close()
+	setupTestProfile(t, srv)
+
+	_, _, err := runCLIErr(t, "issue", "create", "--project", "web", "--subject", "x", "--assignee", "Nobody")
+	if err == nil {
+		t.Fatal("expected an error for an unknown assignee name")
+	}
+	if !strings.Contains(err.Error(), `"web"`) {
+		t.Errorf("error should name the project as typed, got: %v", err)
+	}
+	if strings.Contains(err.Error(), `"7"`) {
+		t.Errorf("error leaked the resolved project id: %v", err)
+	}
+}
