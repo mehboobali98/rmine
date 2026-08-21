@@ -57,12 +57,6 @@ func newClient() (*redmine.Client, error) {
 
 // projectOrDefault supplies the active profile's default project when a
 // command that requires one was not given it.
-//
-// This applies only where a project is mandatory, never to a filter. Letting
-// a stored default narrow `issue list` would mean the same command answered
-// differently depending on configuration the user cannot see in the command
-// they typed — and a quietly narrowed search looks exactly like a project
-// with less work in it.
 func projectOrDefault(flagValue string) (string, error) {
 	if flagValue != "" {
 		return flagValue, nil
@@ -71,6 +65,33 @@ func projectOrDefault(flagValue string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return profile.DefaultProject, nil
+}
+
+// projectFilterOrDefault does the same for a listing command, where
+// --all-projects opts back out.
+//
+// Narrowing a search is a bigger deal than filling in a required field: the
+// scoping comes from stored configuration that does not appear in the command
+// the user typed, and a filtered result looks much like a quiet week. So when
+// the default is what took effect, say so — on stderr, where it reaches a
+// person without disturbing stdout for anything parsing it.
+func projectFilterOrDefault(flagValue string, allProjects bool) (string, error) {
+	if flagValue != "" && allProjects {
+		return "", fmt.Errorf("--project and --all-projects contradict each other")
+	}
+	if flagValue != "" || allProjects {
+		return flagValue, nil
+	}
+
+	profile, err := activeProfile()
+	if err != nil {
+		return "", err
+	}
+	if profile.DefaultProject == "" {
+		return "", nil
+	}
+	promptf("Scoped to the profile's default project %q — pass --all-projects to search all of them.\n", profile.DefaultProject)
 	return profile.DefaultProject, nil
 }
 
