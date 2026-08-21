@@ -42,6 +42,8 @@ warnings go to stderr, so stdout is always parseable on its own.
 - "how much did I work today" → `rmine time list --user me --from <today> --to <today>`
 - "create a ticket in project X titled ..." → `rmine issue create --project "X" --subject "..." --tracker Bug`
 - "update ticket 1234 to in progress, assign to 42" → `rmine issue update 1234 --status "In Progress" --assignee 42`
+- "assign ticket 1234 to Jane" → `rmine issue update 1234 --assignee "Jane"`
+- "what is Jane working on in project X" → `rmine issue list --project "X" --assignee "Jane"`
 - "close ticket 1234" → `rmine issue close 1234`
 - "push ticket 1234's due date to Friday" → `rmine issue update 1234 --due-date 2026-08-28`
 - "unassign ticket 1234" → `rmine issue update 1234 --assignee 0`
@@ -53,10 +55,21 @@ warnings go to stderr, so stdout is always parseable on its own.
 case-insensitively by name (`in progress` finds `In Progress`, `assetsonar
 scrum team` finds `AssetSonar Scrum Team`) — no need for exact server casing.
 
-`--assignee` and `time list --user` are a numeric Redmine user ID, or the
-literal `me` for the authenticated user — **that's it**. There is no
-name-to-ID lookup for other users; don't guess or invent one. Passing a name
-is rejected with an error rather than answered with an empty list.
+`--assignee` and `time list --user` take a numeric Redmine user ID, the
+literal `me`, or a person's **name**.
+
+A name is resolved against the project's member list, so a project must be in
+scope: pass `--project` on `issue list` / `time list`; on `issue update` the
+issue's own project is used automatically. Without one, rmine says so rather
+than guessing — `/users.json` is admin-only on most instances, which is why
+the lookup is project-scoped.
+
+An exact name match wins, otherwise a single substring match is used
+(`jane` → Jane Doe). A name matching several members is an **error** listing
+the candidates — pick one by numeric ID. Never assume which one was meant.
+
+`--assignee 0` unassigns; `--assignee me` on a write resolves to the
+authenticated user's ID.
 
 ## Due date filters
 

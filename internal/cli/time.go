@@ -119,7 +119,7 @@ var timeListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		user, err = resolveUserFilter("--user", user)
+		user, err = resolveUserFilter(client, "--user", user, project)
 		if err != nil {
 			return err
 		}
@@ -252,7 +252,7 @@ func init() {
 
 	timeListCmd.Flags().String("issue", "", "filter by issue ID")
 	timeListCmd.Flags().String("project", "", "filter by project ID, identifier, or name")
-	timeListCmd.Flags().String("user", "", "filter by user ID (or \"me\" for the authenticated user)")
+	timeListCmd.Flags().String("user", "", "filter by user: user ID, \"me\", or a name (needs --project to resolve a name)")
 	timeListCmd.Flags().String("from", "", "only entries spent on or after this date (YYYY-MM-DD)")
 	timeListCmd.Flags().String("to", "", "only entries spent on or before this date (YYYY-MM-DD)")
 	timeListCmd.Flags().String("sort", "", "sort order, e.g. spent_on or \"spent_on:desc\"")
