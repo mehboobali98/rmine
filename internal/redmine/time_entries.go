@@ -113,6 +113,9 @@ type CreateTimeEntryRequest struct {
 	SpentOn    string // YYYY-MM-DD; empty means "today" per Redmine's default
 }
 
+// timeEntryFields is CreateTimeEntryRequest's wire form. It carries the same
+// fields in the same order on purpose, so the two convert directly rather
+// than needing a copy that has to be kept in step field by field.
 type timeEntryFields struct {
 	IssueID    int     `json:"issue_id,omitempty"`
 	ProjectID  string  `json:"project_id,omitempty"`
@@ -127,14 +130,7 @@ func (c *Client) CreateTimeEntry(req CreateTimeEntryRequest) (*TimeEntry, error)
 	body := struct {
 		TimeEntry timeEntryFields `json:"time_entry"`
 	}{
-		TimeEntry: timeEntryFields{
-			IssueID:    req.IssueID,
-			ProjectID:  req.ProjectID,
-			Hours:      req.Hours,
-			ActivityID: req.ActivityID,
-			Comments:   req.Comments,
-			SpentOn:    req.SpentOn,
-		},
+		TimeEntry: timeEntryFields(req),
 	}
 
 	var resp timeEntryResponse
