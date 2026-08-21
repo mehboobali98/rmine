@@ -32,6 +32,10 @@ var timeLogCmd = &cobra.Command{
 		activityName, _ := cmd.Flags().GetString("activity")
 		comment, _ := cmd.Flags().GetString("comment")
 
+		if err := validateDates(dateFlag{"--date", date}); err != nil {
+			return err
+		}
+
 		client, err := newClient()
 		if err != nil {
 			return err
@@ -74,6 +78,10 @@ var timeListCmd = &cobra.Command{
 		to, _ := cmd.Flags().GetString("to")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
+
+		if err := validateDates(dateFlag{"--from", from}, dateFlag{"--to", to}); err != nil {
+			return err
+		}
 
 		client, err := newClient()
 		if err != nil {
@@ -149,6 +157,10 @@ var timeEditCmd = &cobra.Command{
 		date, _ := cmd.Flags().GetString("date")
 		activityName, _ := cmd.Flags().GetString("activity")
 		comment, _ := cmd.Flags().GetString("comment")
+
+		if err := validateDates(dateFlag{"--date", date}); err != nil {
+			return err
+		}
 
 		client, err := newClient()
 		if err != nil {
