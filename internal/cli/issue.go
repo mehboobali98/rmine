@@ -89,14 +89,19 @@ var issueListCmd = &cobra.Command{
 		for _, iss := range issues {
 			rows = append(rows, []string{
 				strconv.Itoa(iss.ID),
+				iss.Project.Name,
 				iss.Tracker.Name,
 				iss.Status.Name,
 				iss.Priority.Name,
 				assigneeName(iss.AssignedTo),
+				orDash(iss.DueDate),
 				iss.Subject,
 			})
 		}
-		printTable([]string{"ID", "TRACKER", "STATUS", "PRIORITY", "ASSIGNEE", "SUBJECT"}, rows)
+		// PROJECT because an unfiltered list spans projects and the rows are
+		// otherwise indistinguishable; DUE because four of this command's
+		// filters narrow by it and none of them used to show it.
+		printTable([]string{"ID", "PROJECT", "TRACKER", "STATUS", "PRIORITY", "ASSIGNEE", "DUE", "SUBJECT"}, rows)
 		return nil
 	},
 }
@@ -132,6 +137,27 @@ var issueViewCmd = &cobra.Command{
 		fmt.Printf("Assignee: %s\n", assigneeName(issue.AssignedTo))
 		if issue.Category != nil {
 			fmt.Printf("Category: %s\n", issue.Category.Name)
+		}
+		if issue.Parent != nil {
+			fmt.Printf("Parent:   #%d\n", issue.Parent.ID)
+		}
+		if issue.FixedVersion != nil {
+			fmt.Printf("Version:  %s\n", issue.FixedVersion.Name)
+		}
+		if issue.StartDate != "" {
+			fmt.Printf("Start:    %s\n", issue.StartDate)
+		}
+		if issue.DueDate != "" {
+			fmt.Printf("Due:      %s\n", issue.DueDate)
+		}
+		if issue.DoneRatio > 0 {
+			fmt.Printf("Progress: %d%%\n", issue.DoneRatio)
+		}
+		if issue.EstimatedHours != nil {
+			fmt.Printf("Estimate: %.2fh\n", *issue.EstimatedHours)
+		}
+		if issue.SpentHours != nil {
+			fmt.Printf("Spent:    %.2fh\n", *issue.SpentHours)
 		}
 		for _, f := range issue.CustomFields {
 			fmt.Printf("%s (id %d): %s\n", f.Name, f.ID, f.Value)
@@ -483,6 +509,15 @@ func init() {
 
 	issueCmd.AddCommand(issueListCmd, issueViewCmd, issueAttachmentsCmd, issueCreateCmd, issueUpdateCmd, issueCloseCmd, issueCommentCmd)
 	rootCmd.AddCommand(issueCmd)
+}
+
+// orDash renders an empty optional value as "-" so a column never collapses
+// to whitespace the eye has to count.
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 func assigneeName(a *redmine.IDName) string {
