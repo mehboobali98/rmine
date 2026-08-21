@@ -37,6 +37,15 @@ var issueListCmd = &cobra.Command{
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
 
+		if err := validateDates(
+			dateFlag{"--updated-after", updatedAfter},
+			dateFlag{"--updated-before", updatedBefore},
+			dateFlag{"--due-after", dueAfter},
+			dateFlag{"--due-before", dueBefore},
+		); err != nil {
+			return err
+		}
+
 		client, err := newClient()
 		if err != nil {
 			return err
@@ -281,8 +290,15 @@ var issueCreateCmd = &cobra.Command{
 		categoryName, _ := cmd.Flags().GetString("category")
 		assignee, _ := cmd.Flags().GetInt("assignee")
 		parent, _ := cmd.Flags().GetInt("parent")
+		startDate, _ := cmd.Flags().GetString("start-date")
+		dueDate, _ := cmd.Flags().GetString("due-date")
+		estimated, _ := cmd.Flags().GetFloat64("estimated-hours")
+		doneRatio, _ := cmd.Flags().GetInt("done-ratio")
 		fieldArgs, _ := cmd.Flags().GetStringArray("field")
 
+		if err := validateDates(dateFlag{"--start-date", startDate}, dateFlag{"--due-date", dueDate}); err != nil {
+			return err
+		}
 		customFields, err := parseCustomFields(fieldArgs)
 		if err != nil {
 			return err
@@ -299,12 +315,16 @@ var issueCreateCmd = &cobra.Command{
 		}
 
 		req := redmine.CreateIssueRequest{
-			ProjectID:    project,
-			Subject:      subject,
-			Description:  description,
-			AssignedTo:   assignee,
-			ParentID:     parent,
-			CustomFields: customFields,
+			ProjectID:      project,
+			Subject:        subject,
+			Description:    description,
+			AssignedTo:     assignee,
+			ParentID:       parent,
+			StartDate:      startDate,
+			DueDate:        dueDate,
+			EstimatedHours: estimated,
+			DoneRatio:      doneRatio,
+			CustomFields:   customFields,
 		}
 		if trackerName != "" {
 			req.TrackerID, err = client.ResolveTrackerID(trackerName)
@@ -356,8 +376,15 @@ var issueUpdateCmd = &cobra.Command{
 		categoryName, _ := cmd.Flags().GetString("category")
 		assignee, _ := cmd.Flags().GetInt("assignee")
 		parent, _ := cmd.Flags().GetInt("parent")
+		startDate, _ := cmd.Flags().GetString("start-date")
+		dueDate, _ := cmd.Flags().GetString("due-date")
+		estimated, _ := cmd.Flags().GetFloat64("estimated-hours")
+		doneRatio, _ := cmd.Flags().GetInt("done-ratio")
 		fieldArgs, _ := cmd.Flags().GetStringArray("field")
 
+		if err := validateDates(dateFlag{"--start-date", startDate}, dateFlag{"--due-date", dueDate}); err != nil {
+			return err
+		}
 		customFields, err := parseCustomFields(fieldArgs)
 		if err != nil {
 			return err
@@ -369,11 +396,15 @@ var issueUpdateCmd = &cobra.Command{
 		}
 
 		req := redmine.UpdateIssueRequest{
-			Subject:      subject,
-			Description:  description,
-			AssignedTo:   assignee,
-			ParentID:     parent,
-			CustomFields: customFields,
+			Subject:        subject,
+			Description:    description,
+			AssignedTo:     assignee,
+			ParentID:       parent,
+			StartDate:      startDate,
+			DueDate:        dueDate,
+			EstimatedHours: estimated,
+			DoneRatio:      doneRatio,
+			CustomFields:   customFields,
 		}
 		if trackerName != "" {
 			req.TrackerID, err = client.ResolveTrackerID(trackerName)
@@ -487,6 +518,10 @@ func init() {
 	issueCreateCmd.Flags().String("category", "", "issue category name (project-specific; see `rmine project categories <project>`)")
 	issueCreateCmd.Flags().Int("assignee", 0, "assignee user ID")
 	issueCreateCmd.Flags().Int("parent", 0, "parent issue ID")
+	issueCreateCmd.Flags().String("start-date", "", "start date (YYYY-MM-DD)")
+	issueCreateCmd.Flags().String("due-date", "", "due date (YYYY-MM-DD)")
+	issueCreateCmd.Flags().Float64("estimated-hours", 0, "estimated hours")
+	issueCreateCmd.Flags().Int("done-ratio", 0, "percent complete (0-100)")
 	issueCreateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable); find IDs via `rmine issue view <id> -o json` on an existing issue")
 	_ = issueCreateCmd.MarkFlagRequired("project")
 	_ = issueCreateCmd.MarkFlagRequired("subject")
@@ -499,6 +534,10 @@ func init() {
 	issueUpdateCmd.Flags().String("category", "", "new category name (project-specific; see `rmine project categories <project>`)")
 	issueUpdateCmd.Flags().Int("assignee", 0, "new assignee user ID")
 	issueUpdateCmd.Flags().Int("parent", 0, "new parent issue ID")
+	issueUpdateCmd.Flags().String("start-date", "", "new start date (YYYY-MM-DD)")
+	issueUpdateCmd.Flags().String("due-date", "", "new due date (YYYY-MM-DD)")
+	issueUpdateCmd.Flags().Float64("estimated-hours", 0, "new estimated hours")
+	issueUpdateCmd.Flags().Int("done-ratio", 0, "new percent complete (0-100)")
 	issueUpdateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable)")
 
 	issueCloseCmd.Flags().String("status", "", "status name to close with (defaults to the server's first closed status)")
@@ -509,6 +548,28 @@ func init() {
 
 	issueCmd.AddCommand(issueListCmd, issueViewCmd, issueAttachmentsCmd, issueCreateCmd, issueUpdateCmd, issueCloseCmd, issueCommentCmd)
 	rootCmd.AddCommand(issueCmd)
+}
+
+// dateFlag pairs a flag name with the value the user gave it, so a rejection
+// can name the flag that was wrong.
+type dateFlag struct {
+	name  string
+	value string
+}
+
+// validateDates checks every non-empty date flag against Redmine's YYYY-MM-DD
+// format. Redmine answers a malformed filter date with an empty result rather
+// than an error, so an unchecked typo reads as "nothing matched".
+func validateDates(flags ...dateFlag) error {
+	for _, f := range flags {
+		if f.value == "" {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", f.value); err != nil {
+			return fmt.Errorf("%s must be a YYYY-MM-DD date, got %q", f.name, f.value)
+		}
+	}
+	return nil
 }
 
 // orDash renders an empty optional value as "-" so a column never collapses

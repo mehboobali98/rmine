@@ -312,29 +312,37 @@ func (c *Client) GetIssue(id int, withComments bool) (*Issue, error) {
 // CreateIssueRequest describes a new issue. Project and Subject are required
 // by Redmine; the rest are optional and omitted from the request when zero.
 type CreateIssueRequest struct {
-	ProjectID    string
-	Subject      string
-	Description  string
-	TrackerID    int
-	PriorityID   int
-	AssignedTo   int
-	CategoryID   int
-	ParentID     int
-	CustomFields []CustomField
+	ProjectID      string
+	Subject        string
+	Description    string
+	TrackerID      int
+	PriorityID     int
+	AssignedTo     int
+	CategoryID     int
+	ParentID       int
+	StartDate      string
+	DueDate        string
+	EstimatedHours float64
+	DoneRatio      int
+	CustomFields   []CustomField
 }
 
 type issueFields struct {
-	ProjectID    string        `json:"project_id,omitempty"`
-	Subject      string        `json:"subject,omitempty"`
-	Description  string        `json:"description,omitempty"`
-	TrackerID    int           `json:"tracker_id,omitempty"`
-	PriorityID   int           `json:"priority_id,omitempty"`
-	AssignedTo   int           `json:"assigned_to_id,omitempty"`
-	StatusID     int           `json:"status_id,omitempty"`
-	CategoryID   int           `json:"category_id,omitempty"`
-	ParentID     int           `json:"parent_issue_id,omitempty"`
-	Notes        string        `json:"notes,omitempty"`
-	CustomFields []CustomField `json:"custom_fields,omitempty"`
+	ProjectID      string        `json:"project_id,omitempty"`
+	Subject        string        `json:"subject,omitempty"`
+	Description    string        `json:"description,omitempty"`
+	TrackerID      int           `json:"tracker_id,omitempty"`
+	PriorityID     int           `json:"priority_id,omitempty"`
+	AssignedTo     int           `json:"assigned_to_id,omitempty"`
+	StatusID       int           `json:"status_id,omitempty"`
+	CategoryID     int           `json:"category_id,omitempty"`
+	ParentID       int           `json:"parent_issue_id,omitempty"`
+	StartDate      string        `json:"start_date,omitempty"`
+	DueDate        string        `json:"due_date,omitempty"`
+	EstimatedHours float64       `json:"estimated_hours,omitempty"`
+	DoneRatio      int           `json:"done_ratio,omitempty"`
+	Notes          string        `json:"notes,omitempty"`
+	CustomFields   []CustomField `json:"custom_fields,omitempty"`
 }
 
 // CreateIssue creates a new issue and returns it as stored by Redmine.
@@ -343,15 +351,19 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 		Issue issueFields `json:"issue"`
 	}{
 		Issue: issueFields{
-			ProjectID:    req.ProjectID,
-			Subject:      req.Subject,
-			Description:  req.Description,
-			TrackerID:    req.TrackerID,
-			PriorityID:   req.PriorityID,
-			AssignedTo:   req.AssignedTo,
-			CategoryID:   req.CategoryID,
-			ParentID:     req.ParentID,
-			CustomFields: req.CustomFields,
+			ProjectID:      req.ProjectID,
+			Subject:        req.Subject,
+			Description:    req.Description,
+			TrackerID:      req.TrackerID,
+			PriorityID:     req.PriorityID,
+			AssignedTo:     req.AssignedTo,
+			CategoryID:     req.CategoryID,
+			ParentID:       req.ParentID,
+			StartDate:      req.StartDate,
+			DueDate:        req.DueDate,
+			EstimatedHours: req.EstimatedHours,
+			DoneRatio:      req.DoneRatio,
+			CustomFields:   req.CustomFields,
 		},
 	}
 
@@ -365,15 +377,19 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 // UpdateIssueRequest describes an edit to an existing issue. Zero-value
 // fields are left unchanged on the server.
 type UpdateIssueRequest struct {
-	Subject      string
-	Description  string
-	TrackerID    int
-	PriorityID   int
-	AssignedTo   int
-	StatusID     int
-	CategoryID   int
-	ParentID     int
-	CustomFields []CustomField
+	Subject        string
+	Description    string
+	TrackerID      int
+	PriorityID     int
+	AssignedTo     int
+	StatusID       int
+	CategoryID     int
+	ParentID       int
+	StartDate      string
+	DueDate        string
+	EstimatedHours float64
+	DoneRatio      int
+	CustomFields   []CustomField
 }
 
 // UpdateIssue applies a partial update to an issue.
@@ -382,15 +398,19 @@ func (c *Client) UpdateIssue(id int, req UpdateIssueRequest) error {
 		Issue issueFields `json:"issue"`
 	}{
 		Issue: issueFields{
-			Subject:      req.Subject,
-			Description:  req.Description,
-			TrackerID:    req.TrackerID,
-			PriorityID:   req.PriorityID,
-			AssignedTo:   req.AssignedTo,
-			StatusID:     req.StatusID,
-			CategoryID:   req.CategoryID,
-			ParentID:     req.ParentID,
-			CustomFields: req.CustomFields,
+			Subject:        req.Subject,
+			Description:    req.Description,
+			TrackerID:      req.TrackerID,
+			PriorityID:     req.PriorityID,
+			AssignedTo:     req.AssignedTo,
+			StatusID:       req.StatusID,
+			CategoryID:     req.CategoryID,
+			ParentID:       req.ParentID,
+			StartDate:      req.StartDate,
+			DueDate:        req.DueDate,
+			EstimatedHours: req.EstimatedHours,
+			DoneRatio:      req.DoneRatio,
+			CustomFields:   req.CustomFields,
 		},
 	}
 	return c.put(fmt.Sprintf("/issues/%d.json", id), body)
