@@ -45,6 +45,12 @@ func New(baseURL, apiKey string) *Client {
 	}
 }
 
+// BaseURL returns the server's root URL, trailing slash trimmed. Callers use
+// it to build the web address of a resource they have fetched over the API.
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
 // APIError represents a non-2xx response from Redmine.
 type APIError struct {
 	StatusCode int

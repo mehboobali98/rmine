@@ -121,7 +121,9 @@ expect closed issues in results too unless you also pass `--status open`.
 ## Attachments and comments
 
 `rmine issue view <id>` reports the issue's dates, progress, estimate,
-parent and target version alongside the usual fields, and always carries its
+parent, target version and its **`url`** in the Redmine web UI alongside the
+usual fields — quote that link when reporting an issue to a person, rather
+than the bare number. `issue list -o json` carries `url` per issue too, and always carries its
 **attachments** (id, filename, content type, size). **Comments** are extra — a long issue's history
 dwarfs the issue itself — so pass `--comments` when you need them. In `-o json`
 they land under `attachments` and `journals`; a journal with empty `notes` is a
@@ -156,7 +158,7 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine project view <id>` | One project's details |
 | `rmine project categories <project>` | List a project's issue categories |
 | `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--limit`, `--all` |
-| `rmine issue view <id>` | Full issue detail, custom fields, and attachments; `--comments` to also fetch comments |
+| `rmine issue view <id>` | Full issue detail, custom fields, web `url`, and attachments; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
 | `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field` |
 | `rmine issue update <id>` | Same optional flags as create, plus `--status` |
