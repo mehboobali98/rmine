@@ -36,18 +36,63 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFlag, "output", "o", "table", "output format: table|json")
 }
 
+// activeProfile resolves the profile this invocation should use.
+func activeProfile() (config.Profile, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Profile{}, err
+	}
+	return cfg.Resolve(profileFlag)
+}
+
 // newClient loads the config, resolves the active profile, and returns a
 // ready-to-use Redmine client.
 func newClient() (*redmine.Client, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-	profile, err := cfg.Resolve(profileFlag)
+	profile, err := activeProfile()
 	if err != nil {
 		return nil, err
 	}
 	return redmine.New(profile.URL, profile.APIKey), nil
+}
+
+// projectOrDefault supplies the active profile's default project when a
+// command that requires one was not given it.
+func projectOrDefault(flagValue string) (string, error) {
+	if flagValue != "" {
+		return flagValue, nil
+	}
+	profile, err := activeProfile()
+	if err != nil {
+		return "", err
+	}
+	return profile.DefaultProject, nil
+}
+
+// projectFilterOrDefault does the same for a listing command, where
+// --all-projects opts back out.
+//
+// Narrowing a search is a bigger deal than filling in a required field: the
+// scoping comes from stored configuration that does not appear in the command
+// the user typed, and a filtered result looks much like a quiet week. So when
+// the default is what took effect, say so — on stderr, where it reaches a
+// person without disturbing stdout for anything parsing it.
+func projectFilterOrDefault(flagValue string, allProjects bool) (string, error) {
+	if flagValue != "" && allProjects {
+		return "", fmt.Errorf("--project and --all-projects contradict each other")
+	}
+	if flagValue != "" || allProjects {
+		return flagValue, nil
+	}
+
+	profile, err := activeProfile()
+	if err != nil {
+		return "", err
+	}
+	if profile.DefaultProject == "" {
+		return "", nil
+	}
+	promptf("Scoped to the profile's default project %q — pass --all-projects to search all of them.\n", profile.DefaultProject)
+	return profile.DefaultProject, nil
 }
 
 // wantsJSON reports whether -o/--output json was requested.

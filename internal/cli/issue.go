@@ -35,9 +35,15 @@ var issueListCmd = &cobra.Command{
 		dueWithin, _ := cmd.Flags().GetInt("due-within")
 		dueNextWeek, _ := cmd.Flags().GetBool("due-next-week")
 		overdue, _ := cmd.Flags().GetBool("overdue")
+		allProjects, _ := cmd.Flags().GetBool("all-projects")
+		sort, _ := cmd.Flags().GetString("sort")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
 
+		sort, err := normalizeSort(sort)
+		if err != nil {
+			return err
+		}
 		if err := validateDates(
 			dateFlag{"--updated-after", updatedAfter},
 			dateFlag{"--updated-before", updatedBefore},
@@ -46,6 +52,12 @@ var issueListCmd = &cobra.Command{
 		); err != nil {
 			return err
 		}
+
+		project, err = projectFilterOrDefault(project, allProjects)
+		if err != nil {
+			return err
+		}
+		projectArg := project
 
 		client, err := newClient()
 		if err != nil {
@@ -64,7 +76,10 @@ var issueListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		assignee, err = resolveUserFilter("--assignee", assignee)
+		// projectArg, not the resolved id: Redmine accepts either in the
+		// memberships path, and an error should name the project the user
+		// typed rather than a number they never saw.
+		assignee, err = resolveUserFilter(client, "--assignee", assignee, projectArg)
 		if err != nil {
 			return err
 		}
@@ -83,6 +98,7 @@ var issueListCmd = &cobra.Command{
 			UpdatedBefore: updatedBefore,
 			DueAfter:      dueAfter,
 			DueBefore:     dueBefore,
+			Sort:          sort,
 			Limit:         limit,
 			All:           all,
 		}
@@ -296,7 +312,7 @@ var issueCreateCmd = &cobra.Command{
 		trackerName, _ := cmd.Flags().GetString("tracker")
 		priorityName, _ := cmd.Flags().GetString("priority")
 		categoryName, _ := cmd.Flags().GetString("category")
-		assignee, _ := cmd.Flags().GetInt("assignee")
+		assignee, _ := cmd.Flags().GetString("assignee")
 		parent, _ := cmd.Flags().GetInt("parent")
 		startDate, _ := cmd.Flags().GetString("start-date")
 		dueDate, _ := cmd.Flags().GetString("due-date")
@@ -312,12 +328,25 @@ var issueCreateCmd = &cobra.Command{
 			return err
 		}
 
+		project, err = projectOrDefault(project)
+		if err != nil {
+			return err
+		}
+		if project == "" {
+			return fmt.Errorf("--project is required (or set one with `rmine config set-default-project`)")
+		}
+
 		client, err := newClient()
 		if err != nil {
 			return err
 		}
 
+		projectArg := project
 		project, err = resolveProjectFilter(client, project)
+		if err != nil {
+			return err
+		}
+		assigneeID, err := resolveAssignee(client, assignee, projectArg)
 		if err != nil {
 			return err
 		}
@@ -326,7 +355,7 @@ var issueCreateCmd = &cobra.Command{
 			ProjectID:      project,
 			Subject:        subject,
 			Description:    description,
-			AssignedTo:     assignee,
+			AssignedTo:     assigneeID,
 			ParentID:       parent,
 			StartDate:      startDate,
 			DueDate:        dueDate,
@@ -401,12 +430,26 @@ var issueUpdateCmd = &cobra.Command{
 			return err
 		}
 
+		// Category and assignee names are both resolved within the issue's
+		// project, which means fetching the issue — once, and only if one of
+		// them was actually given.
+		var fetched *redmine.Issue
+		issueProject := func() (string, error) {
+			if fetched == nil {
+				got, err := client.GetIssue(id, false)
+				if err != nil {
+					return "", err
+				}
+				fetched = got
+			}
+			return strconv.Itoa(fetched.Project.ID), nil
+		}
+
 		// Only flags the user actually typed become part of the request, so
 		// an update never rewrites a field it was not asked about.
 		req := redmine.UpdateIssueRequest{
 			Subject:        flagString(cmd, "subject"),
 			Description:    flagString(cmd, "description"),
-			AssignedTo:     flagInt(cmd, "assignee"),
 			ParentID:       flagInt(cmd, "parent"),
 			StartDate:      flagString(cmd, "start-date"),
 			DueDate:        flagString(cmd, "due-date"),
@@ -438,16 +481,33 @@ var issueUpdateCmd = &cobra.Command{
 		if cmd.Flags().Changed("category") {
 			categoryID := 0 // --category "" clears it
 			if categoryName != "" {
-				issue, err := client.GetIssue(id, false)
+				project, err := issueProject()
 				if err != nil {
 					return err
 				}
-				categoryID, err = client.ResolveIssueCategoryID(strconv.Itoa(issue.Project.ID), categoryName)
+				categoryID, err = client.ResolveIssueCategoryID(project, categoryName)
 				if err != nil {
 					return err
 				}
 			}
 			req.CategoryID = &categoryID
+		}
+		if cmd.Flags().Changed("assignee") {
+			assignee, _ := cmd.Flags().GetString("assignee")
+
+			// Only look the issue up when the value actually needs a project
+			// to make sense of — an ID, "me" or a clear does not.
+			project := ""
+			if _, numeric := strconv.Atoi(assignee); numeric != nil && assignee != "" && assignee != "me" {
+				if project, err = issueProject(); err != nil {
+					return err
+				}
+			}
+			assigneeID, err := resolveAssignee(client, assignee, project)
+			if err != nil {
+				return err
+			}
+			req.AssignedTo = &assigneeID
 		}
 
 		if err := client.UpdateIssue(id, req); err != nil {
@@ -511,9 +571,10 @@ var issueCommentCmd = &cobra.Command{
 }
 
 func init() {
-	issueListCmd.Flags().String("project", "", "filter by project ID, identifier, or name (e.g. \"AssetSonar Scrum Team\")")
+	issueListCmd.Flags().String("project", "", "filter by project ID, identifier, or name (defaults to the profile's default project)")
+	issueListCmd.Flags().Bool("all-projects", false, "search every project, ignoring the profile's default project")
 	issueListCmd.Flags().String("status", "", "filter by status name (e.g. In Progress), status ID, or open/closed/*")
-	issueListCmd.Flags().String("assignee", "", "filter by assignee user ID (or \"me\" for the authenticated user)")
+	issueListCmd.Flags().String("assignee", "", "filter by assignee: user ID, \"me\", or a name (needs --project to resolve a name)")
 	issueListCmd.Flags().String("tracker", "", "filter by tracker name (e.g. Bug) or tracker ID")
 	issueListCmd.Flags().String("subject", "", "only issues whose subject contains this text")
 	issueListCmd.Flags().String("updated-after", "", "only issues updated on or after this date (YYYY-MM-DD)")
@@ -523,23 +584,23 @@ func init() {
 	issueListCmd.Flags().Int("due-within", 0, "only issues due within this many days from today")
 	issueListCmd.Flags().Bool("due-next-week", false, "only issues due next week (Mon-Sun)")
 	issueListCmd.Flags().Bool("overdue", false, "only issues whose due date has already passed")
+	issueListCmd.Flags().String("sort", "", "sort order, e.g. due_date or \"priority:desc,due_date:asc\"")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
 
-	issueCreateCmd.Flags().String("project", "", "project ID, identifier, or name (required)")
+	issueCreateCmd.Flags().String("project", "", "project ID, identifier, or name (required unless the profile has a default project)")
 	issueCreateCmd.Flags().String("subject", "", "issue subject (required)")
 	issueCreateCmd.Flags().String("description", "", "issue description")
 	issueCreateCmd.Flags().String("tracker", "", "tracker name, e.g. Bug")
 	issueCreateCmd.Flags().String("priority", "", "priority name, e.g. High")
 	issueCreateCmd.Flags().String("category", "", "issue category name (project-specific; see `rmine project categories <project>`)")
-	issueCreateCmd.Flags().Int("assignee", 0, "assignee user ID")
+	issueCreateCmd.Flags().String("assignee", "", "assignee: user ID, \"me\", or a name matched within the project")
 	issueCreateCmd.Flags().Int("parent", 0, "parent issue ID")
 	issueCreateCmd.Flags().String("start-date", "", "start date (YYYY-MM-DD)")
 	issueCreateCmd.Flags().String("due-date", "", "due date (YYYY-MM-DD)")
 	issueCreateCmd.Flags().Float64("estimated-hours", 0, "estimated hours")
 	issueCreateCmd.Flags().Int("done-ratio", 0, "percent complete (0-100)")
 	issueCreateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable); find IDs via `rmine issue view <id> -o json` on an existing issue")
-	_ = issueCreateCmd.MarkFlagRequired("project")
 	_ = issueCreateCmd.MarkFlagRequired("subject")
 
 	issueUpdateCmd.Flags().String("subject", "", "new subject")
@@ -548,7 +609,7 @@ func init() {
 	issueUpdateCmd.Flags().String("priority", "", "new priority name")
 	issueUpdateCmd.Flags().String("status", "", "new status name")
 	issueUpdateCmd.Flags().String("category", "", "new category name, or \"\" to clear (project-specific; see `rmine project categories <project>`)")
-	issueUpdateCmd.Flags().Int("assignee", 0, "new assignee user ID (0 unassigns)")
+	issueUpdateCmd.Flags().String("assignee", "", "new assignee: user ID, \"me\", or a name matched within the issue's project (0 unassigns)")
 	issueUpdateCmd.Flags().Int("parent", 0, "new parent issue ID (0 detaches from the parent)")
 	issueUpdateCmd.Flags().String("start-date", "", "new start date (YYYY-MM-DD)")
 	issueUpdateCmd.Flags().String("due-date", "", "new due date (YYYY-MM-DD)")
@@ -592,6 +653,44 @@ func flagFloat64(cmd *cobra.Command, name string) *float64 {
 	}
 	v, _ := cmd.Flags().GetFloat64(name)
 	return &v
+}
+
+// normalizeSort checks the shape of a Redmine sort spec — comma-separated
+// columns, each optionally suffixed with :asc or :desc — and returns it with
+// incidental whitespace removed. It normalizes rather than only validating
+// so that a spec accepted here is exactly what reaches the server: `--sort
+// "priority:desc, due_date:asc"` is a natural thing to type, and the space
+// after the comma would otherwise travel into the query.
+//
+// Column names are deliberately not checked against a list. Redmine sorts on
+// custom fields too (cf_12), which vary per instance, so a whitelist would
+// reject valid input; a bad column is one of the few things Redmine does
+// report clearly.
+func normalizeSort(spec string) (string, error) {
+	if strings.TrimSpace(spec) == "" {
+		return "", nil
+	}
+
+	parts := strings.Split(spec, ",")
+	cleaned := make([]string, 0, len(parts))
+	for _, part := range parts {
+		column, direction, hasDirection := strings.Cut(strings.TrimSpace(part), ":")
+		column = strings.TrimSpace(column)
+		direction = strings.TrimSpace(direction)
+
+		if column == "" {
+			return "", fmt.Errorf("--sort has an empty column in %q", spec)
+		}
+		if !hasDirection {
+			cleaned = append(cleaned, column)
+			continue
+		}
+		if direction != "asc" && direction != "desc" {
+			return "", fmt.Errorf("--sort direction must be asc or desc, got %q in %q", direction, spec)
+		}
+		cleaned = append(cleaned, column+":"+direction)
+	}
+	return strings.Join(cleaned, ","), nil
 }
 
 // dateFlag pairs a flag name with the value the user gave it, so a rejection
@@ -699,19 +798,58 @@ func resolveTrackerFilter(client *redmine.Client, tracker string) (string, error
 	return strconv.Itoa(id), nil
 }
 
-// resolveUserFilter validates a user filter, which Redmine accepts only as a
-// numeric ID or the literal "me". rmine has no name-to-ID lookup, and passing
-// a name through would filter on a user_id of 0 and quietly return nothing,
-// so a name is rejected with an error that says as much rather than being
-// answered with a plausible-looking empty result.
-func resolveUserFilter(flag, value string) (string, error) {
+// resolveUserFilter turns a user filter into what Redmine accepts: a numeric
+// ID, or the literal "me". A name is resolved through the project's member
+// list when a project is in scope.
+//
+// The lookup has to be project-scoped because /users.json is admin-only,
+// while a project's memberships are readable by its members. With no project
+// given there is nothing to search, so the caller is told what to add — a
+// name passed through verbatim would filter on a user_id of 0 and quietly
+// match nothing.
+func resolveUserFilter(client *redmine.Client, flag, value, project string) (string, error) {
 	if value == "" || value == "me" {
 		return value, nil
 	}
 	if _, err := strconv.Atoi(value); err == nil {
 		return value, nil
 	}
-	return "", fmt.Errorf("%s takes a numeric Redmine user ID or \"me\", not a name like %q — rmine cannot look users up by name", flag, value)
+	if project == "" {
+		return "", fmt.Errorf("%s cannot resolve the name %q without a project — add --project, or pass a numeric user ID", flag, value)
+	}
+	id, err := client.ResolveUserID(project, value)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", flag, err)
+	}
+	return strconv.Itoa(id), nil
+}
+
+// resolveAssignee resolves --assignee for a write, which needs a real numeric
+// ID: Redmine understands "me" in a filter but not in an issue payload. An
+// empty value or 0 means "unassign", which the request layer sends as the
+// empty string Redmine expects.
+func resolveAssignee(client *redmine.Client, value, project string) (int, error) {
+	if value == "" || value == "0" {
+		return 0, nil
+	}
+	if value == "me" {
+		user, err := client.Whoami()
+		if err != nil {
+			return 0, fmt.Errorf("resolving \"me\": %w", err)
+		}
+		return user.ID, nil
+	}
+	if id, err := strconv.Atoi(value); err == nil {
+		return id, nil
+	}
+	if project == "" {
+		return 0, fmt.Errorf("--assignee cannot resolve the name %q without a project — pass a numeric user ID", value)
+	}
+	id, err := client.ResolveUserID(project, value)
+	if err != nil {
+		return 0, fmt.Errorf("--assignee: %w", err)
+	}
+	return id, nil
 }
 
 // resolveIDFilter validates a filter Redmine only accepts as a numeric ID,

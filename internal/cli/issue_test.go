@@ -282,9 +282,11 @@ func TestResolveTrackerFilter(t *testing.T) {
 	}
 }
 
-func TestResolveUserFilterRejectsNames(t *testing.T) {
+// A user name can only be resolved inside a project, because /users.json is
+// admin-only while project memberships are readable by members.
+func TestResolveUserFilterPassesThroughIDsAndMe(t *testing.T) {
 	for _, in := range []string{"", "me", "42"} {
-		got, err := resolveUserFilter("--assignee", in)
+		got, err := resolveUserFilter(nil, "--assignee", in, "")
 		if err != nil {
 			t.Errorf("resolveUserFilter(%q): %v", in, err)
 			continue
@@ -293,14 +295,103 @@ func TestResolveUserFilterRejectsNames(t *testing.T) {
 			t.Errorf("resolveUserFilter(%q) = %q, want it unchanged", in, got)
 		}
 	}
+}
 
-	_, err := resolveUserFilter("--assignee", "Jane Doe")
+func TestResolveUserFilterNeedsAProjectForNames(t *testing.T) {
+	_, err := resolveUserFilter(nil, "--assignee", "Jane Doe", "")
 	if err == nil {
-		t.Fatal("expected an error for a user name")
+		t.Fatal("expected an error for a name with no project in scope")
 	}
-	if !strings.Contains(err.Error(), "--assignee") || !strings.Contains(err.Error(), "Jane Doe") {
-		t.Errorf("error should name the flag and the value, got: %v", err)
+	for _, want := range []string{"--assignee", "Jane Doe", "--project"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
 	}
+}
+
+func TestResolveUserFilterResolvesNameWithinProject(t *testing.T) {
+	srv := membershipServer(t)
+	defer srv.Close()
+	client := redmine.New(srv.URL, "test-key")
+
+	cases := []struct{ in, want string }{
+		{"Jane Doe", "3"},   // exact, case-insensitive
+		{"jane doe", "3"},   //
+		{"jane", "3"},       // unique substring
+		{"Ahmed Khan", "4"}, //
+	}
+	for _, c := range cases {
+		got, err := resolveUserFilter(client, "--assignee", c.in, "7")
+		if err != nil {
+			t.Errorf("resolveUserFilter(%q): %v", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("resolveUserFilter(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Assigning work to the wrong person is not recoverable by the caller, so an
+// ambiguous name is an error listing the candidates rather than a guess.
+func TestResolveUserFilterRejectsAmbiguousName(t *testing.T) {
+	srv := membershipServer(t)
+	defer srv.Close()
+	client := redmine.New(srv.URL, "test-key")
+
+	_, err := resolveUserFilter(client, "--assignee", "an", "7")
+	if err == nil {
+		t.Fatal("expected an error for a name matching several members")
+	}
+	for _, want := range []string{"Jane Doe", "Ahmed Khan", "numeric ID"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
+	}
+}
+
+func TestResolveUserFilterReportsUnknownName(t *testing.T) {
+	srv := membershipServer(t)
+	defer srv.Close()
+	client := redmine.New(srv.URL, "test-key")
+
+	_, err := resolveUserFilter(client, "--assignee", "Nobody", "7")
+	if err == nil {
+		t.Fatal("expected an error for a name that matches no member")
+	}
+	if !errors.Is(err, redmine.ErrNoMatch) {
+		t.Errorf("error should wrap ErrNoMatch, got %v", err)
+	}
+}
+
+// Groups hold project roles too, but cannot be an assignee.
+func TestResolveUserFilterIgnoresGroups(t *testing.T) {
+	srv := membershipServer(t)
+	defer srv.Close()
+	client := redmine.New(srv.URL, "test-key")
+
+	if _, err := resolveUserFilter(client, "--assignee", "Developers", "7"); err == nil {
+		t.Error("a group name should not resolve to an assignee")
+	}
+}
+
+// membershipServer serves one project's members: two people whose names both
+// contain "an", plus a group.
+func membershipServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/projects/7/memberships.json" {
+			t.Errorf("unexpected request: %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"memberships": []map[string]any{
+				{"id": 1, "user": map[string]any{"id": 3, "name": "Jane Doe"}},
+				{"id": 2, "user": map[string]any{"id": 4, "name": "Ahmed Khan"}},
+				{"id": 3, "group": map[string]any{"id": 9, "name": "Developers"}},
+			},
+			"total_count": 3,
+		})
+	}))
 }
 
 func TestResolveIDFilterRejectsNonNumeric(t *testing.T) {
@@ -310,5 +401,40 @@ func TestResolveIDFilterRejectsNonNumeric(t *testing.T) {
 	}
 	if _, err := resolveIDFilter("--issue", "CMDB-7"); err == nil {
 		t.Error("expected an error for a non-numeric issue filter")
+	}
+}
+
+func TestNormalizeSort(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", ""},
+		{"   ", ""},
+		{"due_date", "due_date"},
+		{"due_date:asc", "due_date:asc"},
+		{"priority:desc,due_date:asc", "priority:desc,due_date:asc"},
+		{"cf_12:desc", "cf_12:desc"}, // custom fields sort too, so no whitelist
+		// Whitespace is stripped rather than forwarded into the query.
+		{"priority:desc, due_date:asc", "priority:desc,due_date:asc"},
+		{" due_date : asc ", "due_date:asc"},
+	}
+	for _, c := range cases {
+		got, err := normalizeSort(c.in)
+		if err != nil {
+			t.Errorf("normalizeSort(%q): %v", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("normalizeSort(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+
+	for _, bad := range []string{
+		"due_date:up",
+		"due_date:ASC",
+		",due_date",
+		"due_date,,priority",
+	} {
+		if _, err := normalizeSort(bad); err == nil {
+			t.Errorf("normalizeSort(%q): expected an error", bad)
+		}
 	}
 }
