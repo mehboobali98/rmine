@@ -94,7 +94,7 @@ For unattended setup, `$RMINE_URL` and `$RMINE_API_KEY` supply the two values `r
 
 ## Field notes
 
-Assignees are set and filtered by numeric Redmine user ID (or the literal `me`); looking other users up by name isn't in scope, and passing a name is an error rather than a silently empty result.
+Assignees can be given as a numeric Redmine user ID, the literal `me`, or a person's name. Names are resolved against the project's member list — `/users.json` is admin-only on most instances, while a project's memberships are readable by its members — so a name needs a project in scope: `--project` on `issue list`, and the issue's own project on `issue update`. An exact name wins; failing that a single substring match is accepted, so `--assignee jane` finds Jane Doe. A name matching several members is an error listing them rather than a guess, since assigning work to the wrong person isn't something the caller can detect. If your API key can't read a project's member list, pass a numeric ID.
 
 Custom fields differ per Redmine instance (and sometimes per project/tracker), so they're set generically by numeric ID: `--field 12=staging`, repeatable to set several distinct fields. Passing the same ID more than once (`--field 11=16 --field 11=27`) instead sets that one field to multiple values, for checkbox/multi-select fields. Find a field's ID by inspecting an existing issue that has it set: `rmine issue view <id> -o json`.
 
