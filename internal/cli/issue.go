@@ -92,7 +92,13 @@ var issueListCmd = &cobra.Command{
 		}
 
 		if wantsJSON() {
-			return printJSON(issues)
+			// The table has no room for a URL column, but a caller parsing
+			// JSON is usually the one that needs to hand a human a link.
+			decorated := make([]issueWithURL, 0, len(issues))
+			for i := range issues {
+				decorated = append(decorated, withIssueURL(client, &issues[i]))
+			}
+			return printJSON(decorated)
 		}
 
 		rows := make([][]string, 0, len(issues))
@@ -136,10 +142,11 @@ var issueViewCmd = &cobra.Command{
 		}
 
 		if wantsJSON() {
-			return printJSON(issue)
+			return printJSON(withIssueURL(client, issue))
 		}
 
 		fmt.Printf("#%d %s\n", issue.ID, issue.Subject)
+		fmt.Printf("URL:      %s\n", issueURL(client, issue.ID))
 		fmt.Printf("Project:  %s\n", issue.Project.Name)
 		fmt.Printf("Tracker:  %s\n", issue.Tracker.Name)
 		fmt.Printf("Status:   %s\n", issue.Status.Name)
@@ -607,6 +614,25 @@ func validateDates(flags ...dateFlag) error {
 		}
 	}
 	return nil
+}
+
+// issueWithURL decorates an issue with its address in the Redmine web UI.
+// redmine.Issue mirrors the API response, so a field the API never sends
+// belongs here rather than in that type.
+type issueWithURL struct {
+	*redmine.Issue
+	URL string `json:"url"`
+}
+
+func withIssueURL(client *redmine.Client, issue *redmine.Issue) issueWithURL {
+	return issueWithURL{Issue: issue, URL: issueURL(client, issue.ID)}
+}
+
+// issueURL builds the browser link for an issue. rmine reports issues by
+// number, which is not something a person can open — and an agent relaying a
+// result had no way to produce a link at all.
+func issueURL(client *redmine.Client, id int) string {
+	return fmt.Sprintf("%s/issues/%d", client.BaseURL(), id)
 }
 
 // orDash renders an empty optional value as "-" so a column never collapses
