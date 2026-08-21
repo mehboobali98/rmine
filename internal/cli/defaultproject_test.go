@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -213,5 +214,62 @@ func TestListingsUnscopedWithoutADefault(t *testing.T) {
 	runCLI(t, "issue", "list")
 	if gotProject != "" {
 		t.Errorf("issue list scoped to project_id=%q with no default set", gotProject)
+	}
+}
+
+// Regression, shipped in v0.5.0: `time list --issue 1234` had the profile's
+// default project ANDed onto it, so time on any ticket outside that project
+// came back empty — with a 200 and no error, which reads as "no time logged".
+// rmine-skills' /calibrate runs exactly this command and would have reported
+// zero hours for those tickets.
+func TestIssueFilterIsNotNarrowedByDefaultProject(t *testing.T) {
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/projects/web.json":
+			json.NewEncoder(w).Encode(map[string]any{
+				"project": map[string]any{"id": 7, "name": "Web", "identifier": "web"},
+			})
+		default:
+			gotQuery = r.URL.Query()
+			json.NewEncoder(w).Encode(map[string]any{"time_entries": []any{}, "total_count": 0})
+		}
+	}))
+	defer srv.Close()
+	setupTestProfile(t, srv)
+
+	runCLI(t, "config", "set-default-project", "web")
+	runCLI(t, "time", "list", "--issue", "1234")
+
+	if got := gotQuery.Get("issue_id"); got != "1234" {
+		t.Errorf("issue_id = %q, want 1234", got)
+	}
+	if got := gotQuery.Get("project_id"); got != "" {
+		t.Errorf("default project narrowed an explicit --issue: project_id=%q", got)
+	}
+}
+
+// An explicitly requested project still applies alongside --issue: that is
+// the user asking for it, not configuration deciding on their behalf.
+func TestExplicitProjectStillAppliesWithIssueFilter(t *testing.T) {
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/projects/web.json":
+			json.NewEncoder(w).Encode(map[string]any{
+				"project": map[string]any{"id": 7, "name": "Web", "identifier": "web"},
+			})
+		default:
+			gotQuery = r.URL.Query()
+			json.NewEncoder(w).Encode(map[string]any{"time_entries": []any{}, "total_count": 0})
+		}
+	}))
+	defer srv.Close()
+	setupTestProfile(t, srv)
+
+	runCLI(t, "time", "list", "--issue", "1234", "--project", "web")
+
+	if got := gotQuery.Get("project_id"); got != "7" {
+		t.Errorf("project_id = %q, want 7 from the explicit flag", got)
 	}
 }
