@@ -374,45 +374,79 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 	return &resp.Issue, nil
 }
 
-// UpdateIssueRequest describes an edit to an existing issue. Zero-value
-// fields are left unchanged on the server.
+// UpdateIssueRequest describes an edit to an existing issue.
+//
+// Every field is a pointer, and only the non-nil ones are sent: a nil field
+// is left exactly as it is on the server, while a pointer to a zero value is
+// transmitted explicitly. That distinction is what makes a field clearable —
+// the previous value-typed struct could not tell "leave the description
+// alone" apart from "set the description to empty", and silently chose the
+// former for both.
 type UpdateIssueRequest struct {
-	Subject        string
-	Description    string
-	TrackerID      int
-	PriorityID     int
-	AssignedTo     int
-	StatusID       int
-	CategoryID     int
-	ParentID       int
-	StartDate      string
-	DueDate        string
-	EstimatedHours float64
-	DoneRatio      int
+	Subject        *string
+	Description    *string
+	TrackerID      *int
+	PriorityID     *int
+	StatusID       *int
+	AssignedTo     *int // 0 clears the assignee
+	CategoryID     *int // 0 clears the category
+	ParentID       *int // 0 detaches from the parent issue
+	StartDate      *string
+	DueDate        *string
+	EstimatedHours *float64 // 0 clears the estimate
+	DoneRatio      *int     // 0 is a real value, not a clear
 	CustomFields   []CustomField
+}
+
+// fields renders the request as the sparse object Redmine expects.
+func (r UpdateIssueRequest) fields() map[string]any {
+	m := map[string]any{}
+	setIf(m, "subject", r.Subject)
+	setIf(m, "description", r.Description)
+	setIf(m, "tracker_id", r.TrackerID)
+	setIf(m, "priority_id", r.PriorityID)
+	setIf(m, "status_id", r.StatusID)
+	setIf(m, "start_date", r.StartDate)
+	setIf(m, "due_date", r.DueDate)
+	setIf(m, "done_ratio", r.DoneRatio)
+	if r.AssignedTo != nil {
+		m["assigned_to_id"] = clearable(*r.AssignedTo)
+	}
+	if r.CategoryID != nil {
+		m["category_id"] = clearable(*r.CategoryID)
+	}
+	if r.ParentID != nil {
+		m["parent_issue_id"] = clearable(*r.ParentID)
+	}
+	if r.EstimatedHours != nil {
+		m["estimated_hours"] = clearable(*r.EstimatedHours)
+	}
+	if len(r.CustomFields) > 0 {
+		m["custom_fields"] = r.CustomFields
+	}
+	return m
+}
+
+// setIf adds a field to the payload when the caller set it.
+func setIf[T any](m map[string]any, key string, v *T) {
+	if v != nil {
+		m[key] = *v
+	}
+}
+
+// clearable renders a numeric field that Redmine clears when given an empty
+// string. Sending 0 for these would be rejected as an invalid id rather than
+// understood as "unset it".
+func clearable[T int | float64](v T) any {
+	if v <= 0 {
+		return ""
+	}
+	return v
 }
 
 // UpdateIssue applies a partial update to an issue.
 func (c *Client) UpdateIssue(id int, req UpdateIssueRequest) error {
-	body := struct {
-		Issue issueFields `json:"issue"`
-	}{
-		Issue: issueFields{
-			Subject:        req.Subject,
-			Description:    req.Description,
-			TrackerID:      req.TrackerID,
-			PriorityID:     req.PriorityID,
-			AssignedTo:     req.AssignedTo,
-			StatusID:       req.StatusID,
-			CategoryID:     req.CategoryID,
-			ParentID:       req.ParentID,
-			StartDate:      req.StartDate,
-			DueDate:        req.DueDate,
-			EstimatedHours: req.EstimatedHours,
-			DoneRatio:      req.DoneRatio,
-			CustomFields:   req.CustomFields,
-		},
-	}
+	body := map[string]any{"issue": req.fields()}
 	return c.put(fmt.Sprintf("/issues/%d.json", id), body)
 }
 
