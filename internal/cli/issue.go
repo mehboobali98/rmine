@@ -53,7 +53,7 @@ var issueListCmd = &cobra.Command{
 			return err
 		}
 
-		project, err = projectFilterOrDefault(project, allProjects)
+		project, err = projectFilterOrDefault(project, allProjects, false)
 		if err != nil {
 			return err
 		}
