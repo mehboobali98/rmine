@@ -163,7 +163,7 @@ func TestResolveProjectFilterSkipsListingForIdentifiers(t *testing.T) {
 func TestResolveDueDateRange(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC) // a Friday
 
-	after, before, err := resolveDueDateRange(now, "", "", 2, false)
+	after, before, err := resolveDueDateRange(now, "", "", 2, false, false)
 	if err != nil {
 		t.Fatalf("--due-within: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestResolveDueDateRange(t *testing.T) {
 		t.Errorf("--due-within 2 = %q..%q, want 2026-07-24..2026-07-26", after, before)
 	}
 
-	after, before, err = resolveDueDateRange(now, "", "", 0, true)
+	after, before, err = resolveDueDateRange(now, "", "", 0, true, false)
 	if err != nil {
 		t.Fatalf("--due-next-week: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestResolveDueDateRange(t *testing.T) {
 		t.Errorf("--due-next-week = %q..%q, want 2026-07-27..2026-08-02", after, before)
 	}
 
-	after, before, err = resolveDueDateRange(now, "2026-01-01", "2026-01-31", 0, false)
+	after, before, err = resolveDueDateRange(now, "2026-01-01", "2026-01-31", 0, false, false)
 	if err != nil {
 		t.Fatalf("raw dates: %v", err)
 	}
@@ -187,11 +187,33 @@ func TestResolveDueDateRange(t *testing.T) {
 		t.Errorf("raw dates = %q..%q, want unchanged", after, before)
 	}
 
-	if _, _, err := resolveDueDateRange(now, "", "", 2, true); err == nil {
+	if _, _, err := resolveDueDateRange(now, "", "", 2, true, false); err == nil {
 		t.Error("expected an error when --due-within and --due-next-week are combined")
 	}
-	if _, _, err := resolveDueDateRange(now, "2026-01-01", "", 2, false); err == nil {
+	if _, _, err := resolveDueDateRange(now, "2026-01-01", "", 2, false, false); err == nil {
 		t.Error("expected an error when a shortcut is combined with --due-after")
+	}
+}
+
+func TestResolveDueDateRangeOverdue(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+
+	after, before, err := resolveDueDateRange(now, "", "", 0, false, true)
+	if err != nil {
+		t.Fatalf("--overdue: %v", err)
+	}
+	if after != "" {
+		t.Errorf("--overdue set a lower bound of %q, want none", after)
+	}
+	if before != "2026-07-23" {
+		t.Errorf("--overdue = ..%q, want ..2026-07-23 (strictly before today)", before)
+	}
+
+	if _, _, err := resolveDueDateRange(now, "", "", 0, true, true); err == nil {
+		t.Error("expected an error when --overdue and --due-next-week are combined")
+	}
+	if _, _, err := resolveDueDateRange(now, "", "2026-01-01", 0, false, true); err == nil {
+		t.Error("expected an error when --overdue is combined with --due-before")
 	}
 }
 
