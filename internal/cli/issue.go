@@ -368,22 +368,20 @@ var issueUpdateCmd = &cobra.Command{
 			return err
 		}
 
-		subject, _ := cmd.Flags().GetString("subject")
-		description, _ := cmd.Flags().GetString("description")
 		trackerName, _ := cmd.Flags().GetString("tracker")
 		priorityName, _ := cmd.Flags().GetString("priority")
 		statusName, _ := cmd.Flags().GetString("status")
 		categoryName, _ := cmd.Flags().GetString("category")
-		assignee, _ := cmd.Flags().GetInt("assignee")
-		parent, _ := cmd.Flags().GetInt("parent")
 		startDate, _ := cmd.Flags().GetString("start-date")
 		dueDate, _ := cmd.Flags().GetString("due-date")
-		estimated, _ := cmd.Flags().GetFloat64("estimated-hours")
 		doneRatio, _ := cmd.Flags().GetInt("done-ratio")
 		fieldArgs, _ := cmd.Flags().GetStringArray("field")
 
 		if err := validateDates(dateFlag{"--start-date", startDate}, dateFlag{"--due-date", dueDate}); err != nil {
 			return err
+		}
+		if cmd.Flags().Changed("done-ratio") && (doneRatio < 0 || doneRatio > 100) {
+			return fmt.Errorf("--done-ratio must be between 0 and 100, got %d", doneRatio)
 		}
 		customFields, err := parseCustomFields(fieldArgs)
 		if err != nil {
@@ -395,44 +393,53 @@ var issueUpdateCmd = &cobra.Command{
 			return err
 		}
 
+		// Only flags the user actually typed become part of the request, so
+		// an update never rewrites a field it was not asked about.
 		req := redmine.UpdateIssueRequest{
-			Subject:        subject,
-			Description:    description,
-			AssignedTo:     assignee,
-			ParentID:       parent,
-			StartDate:      startDate,
-			DueDate:        dueDate,
-			EstimatedHours: estimated,
-			DoneRatio:      doneRatio,
+			Subject:        flagString(cmd, "subject"),
+			Description:    flagString(cmd, "description"),
+			AssignedTo:     flagInt(cmd, "assignee"),
+			ParentID:       flagInt(cmd, "parent"),
+			StartDate:      flagString(cmd, "start-date"),
+			DueDate:        flagString(cmd, "due-date"),
+			EstimatedHours: flagFloat64(cmd, "estimated-hours"),
+			DoneRatio:      flagInt(cmd, "done-ratio"),
 			CustomFields:   customFields,
 		}
 		if trackerName != "" {
-			req.TrackerID, err = client.ResolveTrackerID(trackerName)
+			id, err := client.ResolveTrackerID(trackerName)
 			if err != nil {
 				return err
 			}
+			req.TrackerID = &id
 		}
 		if priorityName != "" {
-			req.PriorityID, err = client.ResolveIssuePriorityID(priorityName)
+			id, err := client.ResolveIssuePriorityID(priorityName)
 			if err != nil {
 				return err
 			}
+			req.PriorityID = &id
 		}
 		if statusName != "" {
-			req.StatusID, err = client.ResolveIssueStatusID(statusName)
+			id, err := client.ResolveIssueStatusID(statusName)
 			if err != nil {
 				return err
 			}
+			req.StatusID = &id
 		}
-		if categoryName != "" {
-			issue, err := client.GetIssue(id, false)
-			if err != nil {
-				return err
+		if cmd.Flags().Changed("category") {
+			categoryID := 0 // --category "" clears it
+			if categoryName != "" {
+				issue, err := client.GetIssue(id, false)
+				if err != nil {
+					return err
+				}
+				categoryID, err = client.ResolveIssueCategoryID(strconv.Itoa(issue.Project.ID), categoryName)
+				if err != nil {
+					return err
+				}
 			}
-			req.CategoryID, err = client.ResolveIssueCategoryID(strconv.Itoa(issue.Project.ID), categoryName)
-			if err != nil {
-				return err
-			}
+			req.CategoryID = &categoryID
 		}
 
 		if err := client.UpdateIssue(id, req); err != nil {
@@ -468,7 +475,7 @@ var issueCloseCmd = &cobra.Command{
 			return err
 		}
 
-		if err := client.UpdateIssue(id, redmine.UpdateIssueRequest{StatusID: statusID}); err != nil {
+		if err := client.UpdateIssue(id, redmine.UpdateIssueRequest{StatusID: &statusID}); err != nil {
 			return err
 		}
 		return printAction(fmt.Sprintf("Closed issue #%d", id), actionResult{Status: "closed", Issue: id})
@@ -531,12 +538,12 @@ func init() {
 	issueUpdateCmd.Flags().String("tracker", "", "new tracker name")
 	issueUpdateCmd.Flags().String("priority", "", "new priority name")
 	issueUpdateCmd.Flags().String("status", "", "new status name")
-	issueUpdateCmd.Flags().String("category", "", "new category name (project-specific; see `rmine project categories <project>`)")
-	issueUpdateCmd.Flags().Int("assignee", 0, "new assignee user ID")
-	issueUpdateCmd.Flags().Int("parent", 0, "new parent issue ID")
+	issueUpdateCmd.Flags().String("category", "", "new category name, or \"\" to clear (project-specific; see `rmine project categories <project>`)")
+	issueUpdateCmd.Flags().Int("assignee", 0, "new assignee user ID (0 unassigns)")
+	issueUpdateCmd.Flags().Int("parent", 0, "new parent issue ID (0 detaches from the parent)")
 	issueUpdateCmd.Flags().String("start-date", "", "new start date (YYYY-MM-DD)")
 	issueUpdateCmd.Flags().String("due-date", "", "new due date (YYYY-MM-DD)")
-	issueUpdateCmd.Flags().Float64("estimated-hours", 0, "new estimated hours")
+	issueUpdateCmd.Flags().Float64("estimated-hours", 0, "new estimated hours (0 clears the estimate)")
 	issueUpdateCmd.Flags().Int("done-ratio", 0, "new percent complete (0-100)")
 	issueUpdateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable)")
 
@@ -548,6 +555,34 @@ func init() {
 
 	issueCmd.AddCommand(issueListCmd, issueViewCmd, issueAttachmentsCmd, issueCreateCmd, issueUpdateCmd, issueCloseCmd, issueCommentCmd)
 	rootCmd.AddCommand(issueCmd)
+}
+
+// flagString, flagInt and flagFloat64 return a pointer to a flag's value if
+// the user set it on the command line, and nil otherwise. Update requests
+// send only their non-nil fields, so an unset flag leaves the server's value
+// alone while an explicitly-passed empty one clears it.
+func flagString(cmd *cobra.Command, name string) *string {
+	if !cmd.Flags().Changed(name) {
+		return nil
+	}
+	v, _ := cmd.Flags().GetString(name)
+	return &v
+}
+
+func flagInt(cmd *cobra.Command, name string) *int {
+	if !cmd.Flags().Changed(name) {
+		return nil
+	}
+	v, _ := cmd.Flags().GetInt(name)
+	return &v
+}
+
+func flagFloat64(cmd *cobra.Command, name string) *float64 {
+	if !cmd.Flags().Changed(name) {
+		return nil
+	}
+	v, _ := cmd.Flags().GetFloat64(name)
+	return &v
 }
 
 // dateFlag pairs a flag name with the value the user gave it, so a rejection

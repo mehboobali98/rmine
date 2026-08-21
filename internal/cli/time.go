@@ -153,10 +153,8 @@ var timeEditCmd = &cobra.Command{
 			return err
 		}
 
-		hours, _ := cmd.Flags().GetFloat64("hours")
 		date, _ := cmd.Flags().GetString("date")
 		activityName, _ := cmd.Flags().GetString("activity")
-		comment, _ := cmd.Flags().GetString("comment")
 
 		if err := validateDates(dateFlag{"--date", date}); err != nil {
 			return err
@@ -167,16 +165,20 @@ var timeEditCmd = &cobra.Command{
 			return err
 		}
 
+		// Only the flags actually passed are sent, so editing the hours on an
+		// entry no longer blanks nothing else by accident — and --comment ""
+		// now genuinely clears the comment.
 		req := redmine.UpdateTimeEntryRequest{
-			Hours:    hours,
-			Comments: comment,
-			SpentOn:  date,
+			Hours:    flagFloat64(cmd, "hours"),
+			Comments: flagString(cmd, "comment"),
+			SpentOn:  flagString(cmd, "date"),
 		}
 		if activityName != "" {
-			req.ActivityID, err = client.ResolveTimeEntryActivityID(activityName)
+			activityID, err := client.ResolveTimeEntryActivityID(activityName)
 			if err != nil {
 				return err
 			}
+			req.ActivityID = &activityID
 		}
 
 		if err := client.UpdateTimeEntry(id, req); err != nil {
@@ -230,7 +232,7 @@ func init() {
 	timeEditCmd.Flags().Float64("hours", 0, "new hours value")
 	timeEditCmd.Flags().String("date", "", "new date, YYYY-MM-DD")
 	timeEditCmd.Flags().String("activity", "", "new activity name")
-	timeEditCmd.Flags().String("comment", "", "new comment")
+	timeEditCmd.Flags().String("comment", "", "new comment (\"\" clears it)")
 
 	timeDeleteCmd.Flags().BoolP("force", "y", false, "skip the confirmation prompt")
 
