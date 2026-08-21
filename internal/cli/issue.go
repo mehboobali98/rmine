@@ -52,6 +52,8 @@ var issueListCmd = &cobra.Command{
 			return err
 		}
 
+		projectArg := project
+
 		client, err := newClient()
 		if err != nil {
 			return err
@@ -69,7 +71,10 @@ var issueListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		assignee, err = resolveUserFilter(client, "--assignee", assignee, project)
+		// projectArg, not the resolved id: Redmine accepts either in the
+		// memberships path, and an error should name the project the user
+		// typed rather than a number they never saw.
+		assignee, err = resolveUserFilter(client, "--assignee", assignee, projectArg)
 		if err != nil {
 			return err
 		}
@@ -331,11 +336,12 @@ var issueCreateCmd = &cobra.Command{
 			return err
 		}
 
+		projectArg := project
 		project, err = resolveProjectFilter(client, project)
 		if err != nil {
 			return err
 		}
-		assigneeID, err := resolveAssignee(client, assignee, project)
+		assigneeID, err := resolveAssignee(client, assignee, projectArg)
 		if err != nil {
 			return err
 		}
