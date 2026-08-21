@@ -57,7 +57,12 @@ rmine config use-profile work        # switch persistently
 rmine --profile work issue list      # or override for one command
 RMINE_PROFILE=work rmine issue list  # or via env var
 rmine config list-profiles
+rmine config set-default-project "AssetSonar Scrum Team"
 ```
+
+A profile's default project supplies `--project` wherever it's omitted: on `issue create`, and as the scope for `issue list` and `time list` — so the project you work in most doesn't need retyping. Pass `--all-projects` on the list commands to search everywhere regardless; combining it with `--project` is an error.
+
+Because that scoping comes from stored configuration rather than from the command you typed, the list commands note it on stderr when the default is what took effect. stdout stays clean, so `-o json` is unaffected.
 
 ## Commands
 
@@ -68,7 +73,7 @@ rmine config list-profiles
 | `rmine project list` | Browse projects |
 | `rmine project view <id>` | Show one project's details |
 | `rmine project categories <project>` | List a project's issue categories |
-| `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`) |
+| `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects`) |
 | `rmine issue view <id>` | Show issue details, its web link and attachments (`--comments` to also fetch comments) |
 | `rmine issue attachments <id>` | List an issue's attachments (`--download <dir>` to save them all) |
 | `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`) |
@@ -76,7 +81,7 @@ rmine config list-profiles
 | `rmine issue close <id>` | Close an issue (`--status` to pick a specific closed status) |
 | `rmine issue comment <id> <note>` | Add a comment |
 | `rmine time log [issue-id]` | Log time against an issue, or a project with `--project` (`--hours` required; `--date`, `--activity`, `--comment`) |
-| `rmine time list` | List time entries (`--issue`, `--project`, `--user`, `--from`, `--to`, `--sort`, `--limit`, `--all`) |
+| `rmine time list` | List time entries (`--issue`, `--project`, `--user`, `--from`, `--to`, `--sort`, `--limit`, `--all`, `--all-projects`) |
 | `rmine time edit <id>` | Edit a time entry |
 | `rmine time delete <id>` | Delete a time entry (prompts unless `-y`/`--force`) |
 | `rmine config init` / `add-profile` / `use-profile` / `list-profiles` | Manage server profiles |

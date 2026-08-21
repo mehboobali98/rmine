@@ -35,6 +35,7 @@ var issueListCmd = &cobra.Command{
 		dueWithin, _ := cmd.Flags().GetInt("due-within")
 		dueNextWeek, _ := cmd.Flags().GetBool("due-next-week")
 		overdue, _ := cmd.Flags().GetBool("overdue")
+		allProjects, _ := cmd.Flags().GetBool("all-projects")
 		sort, _ := cmd.Flags().GetString("sort")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
@@ -52,6 +53,10 @@ var issueListCmd = &cobra.Command{
 			return err
 		}
 
+		project, err = projectFilterOrDefault(project, allProjects)
+		if err != nil {
+			return err
+		}
 		projectArg := project
 
 		client, err := newClient()
@@ -566,7 +571,8 @@ var issueCommentCmd = &cobra.Command{
 }
 
 func init() {
-	issueListCmd.Flags().String("project", "", "filter by project ID, identifier, or name (e.g. \"AssetSonar Scrum Team\")")
+	issueListCmd.Flags().String("project", "", "filter by project ID, identifier, or name (defaults to the profile's default project)")
+	issueListCmd.Flags().Bool("all-projects", false, "search every project, ignoring the profile's default project")
 	issueListCmd.Flags().String("status", "", "filter by status name (e.g. In Progress), status ID, or open/closed/*")
 	issueListCmd.Flags().String("assignee", "", "filter by assignee: user ID, \"me\", or a name (needs --project to resolve a name)")
 	issueListCmd.Flags().String("tracker", "", "filter by tracker name (e.g. Bug) or tracker ID")
