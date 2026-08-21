@@ -26,3 +26,7 @@ jobs:
       # -race because the CLI redirects os.Stdout/os.Stderr in tests and
       # drains the capture pipes from goroutines.
       - run: go test -race ./...
+      # Pinned rather than @latest so a new release of staticcheck cannot
+      # fail an unrelated push.
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...

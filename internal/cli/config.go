@@ -154,7 +154,7 @@ func normalizeServerURL(raw string) (string, error) {
 	case "http":
 		promptf("Warning: %s is plain HTTP — your API key will cross the network unencrypted.\n", raw)
 	default:
-		return "", fmt.Errorf("Redmine URL must use http or https, got %q", u.Scheme)
+		return "", fmt.Errorf("server URL must use http or https, got %q", u.Scheme)
 	}
 	if u.Host == "" {
 		return "", fmt.Errorf("invalid Redmine URL %q: no host", raw)
