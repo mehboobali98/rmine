@@ -6,21 +6,16 @@ import (
 	"strconv"
 )
 
-// timeEntryIssueRef is the trimmed-down issue reference embedded in a TimeEntry.
-type timeEntryIssueRef struct {
-	ID int `json:"id"`
-}
-
 // TimeEntry is a logged unit of time against an issue or project.
 type TimeEntry struct {
-	ID       int                `json:"id"`
-	Project  IDName             `json:"project"`
-	Issue    *timeEntryIssueRef `json:"issue"`
-	User     IDName             `json:"user"`
-	Activity IDName             `json:"activity"`
-	Hours    float64            `json:"hours"`
-	Comments string             `json:"comments"`
-	SpentOn  string             `json:"spent_on"`
+	ID       int       `json:"id"`
+	Project  IDName    `json:"project"`
+	Issue    *IssueRef `json:"issue"`
+	User     IDName    `json:"user"`
+	Activity IDName    `json:"activity"`
+	Hours    float64   `json:"hours"`
+	Comments string    `json:"comments"`
+	SpentOn  string    `json:"spent_on"`
 }
 
 // TimeEntryListFilter narrows a `rmine time list` query. Empty fields are omitted.

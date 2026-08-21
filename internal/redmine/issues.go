@@ -10,22 +10,41 @@ import (
 )
 
 // Issue is a Redmine issue.
+//
+// The scheduling fields — due date, start date, progress, estimate — are
+// carried even though rmine long filtered on due dates without ever reading
+// one back. Anything omitted here is dropped from `issue view -o json` too,
+// which is the source of truth the skill file points agents at, so a field
+// missing from this struct is a question rmine simply cannot answer.
 type Issue struct {
-	ID           int           `json:"id"`
-	Project      IDName        `json:"project"`
-	Tracker      IDName        `json:"tracker"`
-	Status       IDName        `json:"status"`
-	Priority     IDName        `json:"priority"`
-	Author       IDName        `json:"author"`
-	AssignedTo   *IDName       `json:"assigned_to"`
-	Subject      string        `json:"subject"`
-	Description  string        `json:"description"`
-	Category     *IDName       `json:"category,omitempty"`
-	CustomFields []CustomField `json:"custom_fields,omitempty"`
-	Attachments  []Attachment  `json:"attachments,omitempty"`
-	Journals     []Journal     `json:"journals,omitempty"`
-	CreatedOn    time.Time     `json:"created_on"`
-	UpdatedOn    time.Time     `json:"updated_on"`
+	ID             int           `json:"id"`
+	Project        IDName        `json:"project"`
+	Tracker        IDName        `json:"tracker"`
+	Status         IDName        `json:"status"`
+	Priority       IDName        `json:"priority"`
+	Author         IDName        `json:"author"`
+	AssignedTo     *IDName       `json:"assigned_to"`
+	Subject        string        `json:"subject"`
+	Description    string        `json:"description"`
+	Category       *IDName       `json:"category,omitempty"`
+	Parent         *IssueRef     `json:"parent,omitempty"`
+	FixedVersion   *IDName       `json:"fixed_version,omitempty"`
+	StartDate      string        `json:"start_date,omitempty"`
+	DueDate        string        `json:"due_date,omitempty"`
+	DoneRatio      int           `json:"done_ratio"`
+	EstimatedHours *float64      `json:"estimated_hours,omitempty"`
+	SpentHours     *float64      `json:"spent_hours,omitempty"`
+	CustomFields   []CustomField `json:"custom_fields,omitempty"`
+	Attachments    []Attachment  `json:"attachments,omitempty"`
+	Journals       []Journal     `json:"journals,omitempty"`
+	CreatedOn      time.Time     `json:"created_on"`
+	UpdatedOn      time.Time     `json:"updated_on"`
+}
+
+// IssueRef is a bare reference to another issue — what Redmine embeds for an
+// issue's parent, and for the issue a time entry was logged against.
+type IssueRef struct {
+	ID int `json:"id"`
 }
 
 // Attachment is a file attached to an issue. ContentURL is an absolute URL on
