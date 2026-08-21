@@ -26,3 +26,9 @@ checksum:
 
 changelog:
   sort: asc
+  filters:
+    # Merge commits restate the PR title that its own commits already say,
+    # so they are pure noise in generated notes.
+    exclude:
+      - "^Merge pull request"
+      - "^Merge branch"

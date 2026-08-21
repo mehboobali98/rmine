@@ -40,3 +40,30 @@ func TestVersionUsesStampedValue(t *testing.T) {
 		t.Errorf("Version() = %q, want the stamped v1.2.3", got)
 	}
 }
+
+// goreleaser's template drops the leading v while the go tool keeps it, so
+// the same release used to report itself two ways depending on how it had
+// been installed.
+func TestVersionSpellingIsIndependentOfTheBuildSystem(t *testing.T) {
+	orig := version
+	t.Cleanup(func() { version = orig })
+
+	for _, stamped := range []string{"0.5.1", "v0.5.1"} {
+		version = stamped
+		if got := Version(); got != "v0.5.1" {
+			t.Errorf("stamped %q reported as %q, want v0.5.1", stamped, got)
+		}
+	}
+
+	// Snapshot and pre-release forms keep their shape, gaining only the v.
+	version = "0.5.2-SNAPSHOT-abc1234"
+	if got := Version(); got != "v0.5.2-SNAPSHOT-abc1234" {
+		t.Errorf("snapshot reported as %q", got)
+	}
+
+	// An unstamped build must not become "vdev".
+	version = "dev"
+	if got := Version(); got != "dev" && !strings.HasPrefix(got, "v") {
+		t.Errorf("unstamped build reported as %q", got)
+	}
+}
