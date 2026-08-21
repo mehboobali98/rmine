@@ -327,6 +327,9 @@ type CreateIssueRequest struct {
 	CustomFields   []CustomField
 }
 
+// issueFields is the payload for the two writes that always send a fixed set
+// of fields: creating an issue, and appending a note. Updates build a sparse
+// map instead — see UpdateIssueRequest.fields.
 type issueFields struct {
 	ProjectID      string        `json:"project_id,omitempty"`
 	Subject        string        `json:"subject,omitempty"`
@@ -334,7 +337,6 @@ type issueFields struct {
 	TrackerID      int           `json:"tracker_id,omitempty"`
 	PriorityID     int           `json:"priority_id,omitempty"`
 	AssignedTo     int           `json:"assigned_to_id,omitempty"`
-	StatusID       int           `json:"status_id,omitempty"`
 	CategoryID     int           `json:"category_id,omitempty"`
 	ParentID       int           `json:"parent_issue_id,omitempty"`
 	StartDate      string        `json:"start_date,omitempty"`
