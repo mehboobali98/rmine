@@ -76,11 +76,17 @@ func projectOrDefault(flagValue string) (string, error) {
 // the user typed, and a filtered result looks much like a quiet week. So when
 // the default is what took effect, say so — on stderr, where it reaches a
 // person without disturbing stdout for anything parsing it.
-func projectFilterOrDefault(flagValue string, allProjects bool) (string, error) {
+//
+// explicitScope reports that the caller already pinned the result set some
+// other way — `time list --issue 1234` names one issue, and that issue is in
+// whatever project it is in. Applying the default on top would ask for
+// entries on that issue *and* in an unrelated project, which matches nothing
+// at all, and an empty list is a valid-looking answer.
+func projectFilterOrDefault(flagValue string, allProjects, explicitScope bool) (string, error) {
 	if flagValue != "" && allProjects {
 		return "", fmt.Errorf("--project and --all-projects contradict each other")
 	}
-	if flagValue != "" || allProjects {
+	if flagValue != "" || allProjects || explicitScope {
 		return flagValue, nil
 	}
 
