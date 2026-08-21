@@ -80,6 +80,7 @@ rmine config list-profiles
 | `rmine time edit <id>` | Edit a time entry |
 | `rmine time delete <id>` | Delete a time entry (prompts unless `-y`/`--force`) |
 | `rmine config init` / `add-profile` / `use-profile` / `list-profiles` | Manage server profiles |
+| `rmine config set-default-project <project>` | Set the active profile's default project (`""` clears it) |
 | `rmine skill install` / `uninstall` | Install or remove the rmine Claude Code skill (`--local` for this project, `--force` to overwrite a file rmine didn't write) |
 
 Every command accepts `-o`/`--output json` and `--profile <name>` to target a specific server for that one call.

@@ -100,9 +100,9 @@ var configListProfilesCmd = &cobra.Command{
 			if name == cfg.CurrentProfile {
 				current = "*"
 			}
-			rows = append(rows, []string{current, name, cfg.Profiles[name].URL})
+			rows = append(rows, []string{current, name, cfg.Profiles[name].URL, orDash(cfg.Profiles[name].DefaultProject)})
 		}
-		printTable([]string{"", "NAME", "URL"}, rows)
+		printTable([]string{"", "NAME", "URL", "DEFAULT PROJECT"}, rows)
 		return nil
 	},
 }
@@ -166,13 +166,67 @@ func normalizeServerURL(raw string) (string, error) {
 // reports it. The API key is deliberately not included: listing profiles is a
 // routine call, and printing a secret makes it easy to leak into a log.
 type profileInfo struct {
-	Name    string `json:"name"`
-	URL     string `json:"url"`
-	Current bool   `json:"current"`
+	Name           string `json:"name"`
+	URL            string `json:"url"`
+	Current        bool   `json:"current"`
+	DefaultProject string `json:"default_project,omitempty"`
+}
+
+var configSetDefaultProjectCmd = &cobra.Command{
+	Use:   "set-default-project <project>",
+	Short: "Set the active profile's default project (pass \"\" to clear)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		project := args[0]
+
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+		name := profileName(cfg)
+		profile, ok := cfg.Profiles[name]
+		if !ok {
+			return fmt.Errorf("no such profile %q", name)
+		}
+
+		// Check it against the server before storing, so a typo surfaces now
+		// rather than on the next `issue create` that relies on it.
+		if project != "" {
+			client := redmine.New(profile.URL, profile.APIKey)
+			if _, err := resolveProjectFilter(client, project); err != nil {
+				return err
+			}
+		}
+
+		profile.DefaultProject = project
+		cfg.Profiles[name] = profile
+		if err := cfg.Save(); err != nil {
+			return err
+		}
+
+		if project == "" {
+			return printAction(fmt.Sprintf("Cleared the default project for profile %q", name),
+				actionResult{Status: "cleared", Profile: name})
+		}
+		return printAction(fmt.Sprintf("Default project for profile %q is now %q", name, project),
+			actionResult{Status: "set", Profile: name})
+	},
+}
+
+// profileName reports which profile the command should act on: the --profile
+// flag, then $RMINE_PROFILE, then the configured current one.
+func profileName(cfg *config.Config) string {
+	if profileFlag != "" {
+		return profileFlag
+	}
+	if env := os.Getenv("RMINE_PROFILE"); env != "" {
+		return env
+	}
+	return cfg.CurrentProfile
 }
 
 func init() {
-	configCmd.AddCommand(configInitCmd, configAddProfileCmd, configUseProfileCmd, configListProfilesCmd)
+	configCmd.AddCommand(configInitCmd, configAddProfileCmd, configUseProfileCmd, configListProfilesCmd, configSetDefaultProjectCmd)
 	rootCmd.AddCommand(configCmd)
 }
 

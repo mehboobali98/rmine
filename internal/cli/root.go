@@ -36,18 +36,42 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFlag, "output", "o", "table", "output format: table|json")
 }
 
+// activeProfile resolves the profile this invocation should use.
+func activeProfile() (config.Profile, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Profile{}, err
+	}
+	return cfg.Resolve(profileFlag)
+}
+
 // newClient loads the config, resolves the active profile, and returns a
 // ready-to-use Redmine client.
 func newClient() (*redmine.Client, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-	profile, err := cfg.Resolve(profileFlag)
+	profile, err := activeProfile()
 	if err != nil {
 		return nil, err
 	}
 	return redmine.New(profile.URL, profile.APIKey), nil
+}
+
+// projectOrDefault supplies the active profile's default project when a
+// command that requires one was not given it.
+//
+// This applies only where a project is mandatory, never to a filter. Letting
+// a stored default narrow `issue list` would mean the same command answered
+// differently depending on configuration the user cannot see in the command
+// they typed — and a quietly narrowed search looks exactly like a project
+// with less work in it.
+func projectOrDefault(flagValue string) (string, error) {
+	if flagValue != "" {
+		return flagValue, nil
+	}
+	profile, err := activeProfile()
+	if err != nil {
+		return "", err
+	}
+	return profile.DefaultProject, nil
 }
 
 // wantsJSON reports whether -o/--output json was requested.

@@ -318,6 +318,14 @@ var issueCreateCmd = &cobra.Command{
 			return err
 		}
 
+		project, err = projectOrDefault(project)
+		if err != nil {
+			return err
+		}
+		if project == "" {
+			return fmt.Errorf("--project is required (or set one with `rmine config set-default-project`)")
+		}
+
 		client, err := newClient()
 		if err != nil {
 			return err
@@ -568,7 +576,7 @@ func init() {
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
 
-	issueCreateCmd.Flags().String("project", "", "project ID, identifier, or name (required)")
+	issueCreateCmd.Flags().String("project", "", "project ID, identifier, or name (required unless the profile has a default project)")
 	issueCreateCmd.Flags().String("subject", "", "issue subject (required)")
 	issueCreateCmd.Flags().String("description", "", "issue description")
 	issueCreateCmd.Flags().String("tracker", "", "tracker name, e.g. Bug")
@@ -581,7 +589,6 @@ func init() {
 	issueCreateCmd.Flags().Float64("estimated-hours", 0, "estimated hours")
 	issueCreateCmd.Flags().Int("done-ratio", 0, "percent complete (0-100)")
 	issueCreateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable); find IDs via `rmine issue view <id> -o json` on an existing issue")
-	_ = issueCreateCmd.MarkFlagRequired("project")
 	_ = issueCreateCmd.MarkFlagRequired("subject")
 
 	issueUpdateCmd.Flags().String("subject", "", "new subject")
