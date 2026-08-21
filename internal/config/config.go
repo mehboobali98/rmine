@@ -10,10 +10,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Profile holds the connection details for one Redmine server.
+// Profile holds the connection details for one Redmine server, plus the
+// preferences that belong to that server rather than to the machine.
 type Profile struct {
 	URL    string `yaml:"url"`
 	APIKey string `yaml:"api_key"`
+
+	// DefaultProject supplies the project for commands that require one and
+	// were not given it. It deliberately does not narrow searches — see
+	// projectOrDefault in the cli package.
+	DefaultProject string `yaml:"default_project,omitempty"`
 }
 
 // Config is the full contents of the config file.

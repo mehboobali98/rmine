@@ -18,6 +18,14 @@ switch), `rmine --profile <name> ...` or `RMINE_PROFILE=<name>` (one-off
 override, flag beats env beats the configured current profile), `rmine
 config list-profiles`.
 
+## Default project
+
+A profile may carry a default project (`rmine config set-default-project
+"X"`), which supplies `--project` for `issue create` when it is omitted. It
+does **not** apply to `issue list` or `time list` — always pass `--project`
+explicitly when filtering, and never assume a listing was scoped to a project
+you did not name.
+
 ## Output format
 
 Default output is a human-readable table. Pass `-o json` (long form
@@ -189,6 +197,7 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine issue comment <id> <note>` | Add a comment |
 | `rmine time log/list/edit/delete` | See above; log takes an issue ID or `--project`, plus `--hours` (required), `--date`, `--activity`, `--comment`; list takes `--issue`, `--project`, `--user`, `--from`, `--to`, `--sort`, `--limit`, `--all`; delete prompts unless `--force` |
 | `rmine config init/add-profile/use-profile/list-profiles` | Manage server profiles |
+| `rmine config set-default-project <project>` | Set the active profile's default project (`""` clears it) |
 | `rmine skill install` | (Re)install this skill file (`--local` for the current project, `--force` to overwrite a file rmine didn't write) |
 | `rmine skill uninstall` | Remove it again (same flags) |
 
