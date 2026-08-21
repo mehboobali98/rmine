@@ -5,6 +5,8 @@ builds:
     binary: rmine
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X github.com/mehboobali98/rmine/internal/cli.version={{.Version}}
     goos:
       - linux
       - darwin
