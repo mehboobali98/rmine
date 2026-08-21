@@ -67,7 +67,7 @@ rmine config list-profiles
 | `rmine project view <id>` | Show one project's details |
 | `rmine project categories <project>` | List a project's issue categories |
 | `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--limit`, `--all`) |
-| `rmine issue view <id>` | Show issue details and attachments (`--comments` to also fetch comments) |
+| `rmine issue view <id>` | Show issue details, its web link and attachments (`--comments` to also fetch comments) |
 | `rmine issue attachments <id>` | List an issue's attachments (`--download <dir>` to save them all) |
 | `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`) |
 | `rmine issue update <id>` | Edit an issue (same optional flags as create, plus `--status`) |
@@ -83,6 +83,8 @@ rmine config list-profiles
 Every command accepts `-o`/`--output json` and `--profile <name>` to target a specific server for that one call.
 
 ## Scripting
+
+`issue view` and `issue list -o json` both carry a `url` field with the issue's address in the Redmine web UI, so a script or an assistant reporting a result can hand over a link rather than a bare number.
 
 `-o json` (long form `--output json`) works on every command, including the ones that change something — those print `{"status": "...", ...}` naming what was acted on, so a script or an agent can parse a result from any call. Empty lists come back as `[]`, never `null`. Prompts, warnings and progress notes go to stderr, so they never interleave with the JSON on stdout.
 
