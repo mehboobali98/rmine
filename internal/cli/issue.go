@@ -34,6 +34,7 @@ var issueListCmd = &cobra.Command{
 		dueBefore, _ := cmd.Flags().GetString("due-before")
 		dueWithin, _ := cmd.Flags().GetInt("due-within")
 		dueNextWeek, _ := cmd.Flags().GetBool("due-next-week")
+		overdue, _ := cmd.Flags().GetBool("overdue")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
 
@@ -67,7 +68,7 @@ var issueListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		dueAfter, dueBefore, err = resolveDueDateRange(time.Now(), dueAfter, dueBefore, dueWithin, dueNextWeek)
+		dueAfter, dueBefore, err = resolveDueDateRange(time.Now(), dueAfter, dueBefore, dueWithin, dueNextWeek, overdue)
 		if err != nil {
 			return err
 		}
@@ -514,6 +515,7 @@ func init() {
 	issueListCmd.Flags().String("due-before", "", "only issues due on or before this date (YYYY-MM-DD)")
 	issueListCmd.Flags().Int("due-within", 0, "only issues due within this many days from today")
 	issueListCmd.Flags().Bool("due-next-week", false, "only issues due next week (Mon-Sun)")
+	issueListCmd.Flags().Bool("overdue", false, "only issues whose due date has already passed")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
 
@@ -769,10 +771,10 @@ func parseCustomFields(raw []string) ([]redmine.CustomField, error) {
 }
 
 // resolveDueDateRange combines the raw --due-after/--due-before dates with
-// the --due-within/--due-next-week shortcuts into a single (after, before)
-// range, relative to now. The shortcuts are mutually exclusive with each
-// other and with the raw flags.
-func resolveDueDateRange(now time.Time, after, before string, within int, nextWeek bool) (string, string, error) {
+// the --due-within/--due-next-week/--overdue shortcuts into a single
+// (after, before) range, relative to now. The shortcuts are mutually
+// exclusive with each other and with the raw flags.
+func resolveDueDateRange(now time.Time, after, before string, within int, nextWeek, overdue bool) (string, string, error) {
 	shortcuts := 0
 	if within > 0 {
 		shortcuts++
@@ -780,11 +782,14 @@ func resolveDueDateRange(now time.Time, after, before string, within int, nextWe
 	if nextWeek {
 		shortcuts++
 	}
+	if overdue {
+		shortcuts++
+	}
 	if shortcuts > 1 {
-		return "", "", fmt.Errorf("only one of --due-within or --due-next-week may be set")
+		return "", "", fmt.Errorf("only one of --due-within, --due-next-week or --overdue may be set")
 	}
 	if shortcuts > 0 && (after != "" || before != "") {
-		return "", "", fmt.Errorf("--due-within/--due-next-week cannot be combined with --due-after/--due-before")
+		return "", "", fmt.Errorf("--due-within/--due-next-week/--overdue cannot be combined with --due-after/--due-before")
 	}
 
 	const layout = "2006-01-02"
@@ -796,6 +801,11 @@ func resolveDueDateRange(now time.Time, after, before string, within int, nextWe
 		nextMonday := monday.AddDate(0, 0, 7)
 		nextSunday := nextMonday.AddDate(0, 0, 6)
 		return nextMonday.Format(layout), nextSunday.Format(layout), nil
+	case overdue:
+		// Everything due strictly before today. Redmine's plain filters
+		// already restrict to open issues unless --status says otherwise, so
+		// this does not drag in issues that were closed late.
+		return "", now.AddDate(0, 0, -1).Format(layout), nil
 	default:
 		return after, before, nil
 	}
