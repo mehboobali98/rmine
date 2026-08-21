@@ -10,22 +10,41 @@ import (
 )
 
 // Issue is a Redmine issue.
+//
+// The scheduling fields — due date, start date, progress, estimate — are
+// carried even though rmine long filtered on due dates without ever reading
+// one back. Anything omitted here is dropped from `issue view -o json` too,
+// which is the source of truth the skill file points agents at, so a field
+// missing from this struct is a question rmine simply cannot answer.
 type Issue struct {
-	ID           int           `json:"id"`
-	Project      IDName        `json:"project"`
-	Tracker      IDName        `json:"tracker"`
-	Status       IDName        `json:"status"`
-	Priority     IDName        `json:"priority"`
-	Author       IDName        `json:"author"`
-	AssignedTo   *IDName       `json:"assigned_to"`
-	Subject      string        `json:"subject"`
-	Description  string        `json:"description"`
-	Category     *IDName       `json:"category,omitempty"`
-	CustomFields []CustomField `json:"custom_fields,omitempty"`
-	Attachments  []Attachment  `json:"attachments,omitempty"`
-	Journals     []Journal     `json:"journals,omitempty"`
-	CreatedOn    time.Time     `json:"created_on"`
-	UpdatedOn    time.Time     `json:"updated_on"`
+	ID             int           `json:"id"`
+	Project        IDName        `json:"project"`
+	Tracker        IDName        `json:"tracker"`
+	Status         IDName        `json:"status"`
+	Priority       IDName        `json:"priority"`
+	Author         IDName        `json:"author"`
+	AssignedTo     *IDName       `json:"assigned_to"`
+	Subject        string        `json:"subject"`
+	Description    string        `json:"description"`
+	Category       *IDName       `json:"category,omitempty"`
+	Parent         *IssueRef     `json:"parent,omitempty"`
+	FixedVersion   *IDName       `json:"fixed_version,omitempty"`
+	StartDate      string        `json:"start_date,omitempty"`
+	DueDate        string        `json:"due_date,omitempty"`
+	DoneRatio      int           `json:"done_ratio"`
+	EstimatedHours *float64      `json:"estimated_hours,omitempty"`
+	SpentHours     *float64      `json:"spent_hours,omitempty"`
+	CustomFields   []CustomField `json:"custom_fields,omitempty"`
+	Attachments    []Attachment  `json:"attachments,omitempty"`
+	Journals       []Journal     `json:"journals,omitempty"`
+	CreatedOn      time.Time     `json:"created_on"`
+	UpdatedOn      time.Time     `json:"updated_on"`
+}
+
+// IssueRef is a bare reference to another issue — what Redmine embeds for an
+// issue's parent, and for the issue a time entry was logged against.
+type IssueRef struct {
+	ID int `json:"id"`
 }
 
 // Attachment is a file attached to an issue. ContentURL is an absolute URL on
@@ -293,29 +312,39 @@ func (c *Client) GetIssue(id int, withComments bool) (*Issue, error) {
 // CreateIssueRequest describes a new issue. Project and Subject are required
 // by Redmine; the rest are optional and omitted from the request when zero.
 type CreateIssueRequest struct {
-	ProjectID    string
-	Subject      string
-	Description  string
-	TrackerID    int
-	PriorityID   int
-	AssignedTo   int
-	CategoryID   int
-	ParentID     int
-	CustomFields []CustomField
+	ProjectID      string
+	Subject        string
+	Description    string
+	TrackerID      int
+	PriorityID     int
+	AssignedTo     int
+	CategoryID     int
+	ParentID       int
+	StartDate      string
+	DueDate        string
+	EstimatedHours float64
+	DoneRatio      int
+	CustomFields   []CustomField
 }
 
+// issueFields is the payload for the two writes that always send a fixed set
+// of fields: creating an issue, and appending a note. Updates build a sparse
+// map instead — see UpdateIssueRequest.fields.
 type issueFields struct {
-	ProjectID    string        `json:"project_id,omitempty"`
-	Subject      string        `json:"subject,omitempty"`
-	Description  string        `json:"description,omitempty"`
-	TrackerID    int           `json:"tracker_id,omitempty"`
-	PriorityID   int           `json:"priority_id,omitempty"`
-	AssignedTo   int           `json:"assigned_to_id,omitempty"`
-	StatusID     int           `json:"status_id,omitempty"`
-	CategoryID   int           `json:"category_id,omitempty"`
-	ParentID     int           `json:"parent_issue_id,omitempty"`
-	Notes        string        `json:"notes,omitempty"`
-	CustomFields []CustomField `json:"custom_fields,omitempty"`
+	ProjectID      string        `json:"project_id,omitempty"`
+	Subject        string        `json:"subject,omitempty"`
+	Description    string        `json:"description,omitempty"`
+	TrackerID      int           `json:"tracker_id,omitempty"`
+	PriorityID     int           `json:"priority_id,omitempty"`
+	AssignedTo     int           `json:"assigned_to_id,omitempty"`
+	CategoryID     int           `json:"category_id,omitempty"`
+	ParentID       int           `json:"parent_issue_id,omitempty"`
+	StartDate      string        `json:"start_date,omitempty"`
+	DueDate        string        `json:"due_date,omitempty"`
+	EstimatedHours float64       `json:"estimated_hours,omitempty"`
+	DoneRatio      int           `json:"done_ratio,omitempty"`
+	Notes          string        `json:"notes,omitempty"`
+	CustomFields   []CustomField `json:"custom_fields,omitempty"`
 }
 
 // CreateIssue creates a new issue and returns it as stored by Redmine.
@@ -324,15 +353,19 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 		Issue issueFields `json:"issue"`
 	}{
 		Issue: issueFields{
-			ProjectID:    req.ProjectID,
-			Subject:      req.Subject,
-			Description:  req.Description,
-			TrackerID:    req.TrackerID,
-			PriorityID:   req.PriorityID,
-			AssignedTo:   req.AssignedTo,
-			CategoryID:   req.CategoryID,
-			ParentID:     req.ParentID,
-			CustomFields: req.CustomFields,
+			ProjectID:      req.ProjectID,
+			Subject:        req.Subject,
+			Description:    req.Description,
+			TrackerID:      req.TrackerID,
+			PriorityID:     req.PriorityID,
+			AssignedTo:     req.AssignedTo,
+			CategoryID:     req.CategoryID,
+			ParentID:       req.ParentID,
+			StartDate:      req.StartDate,
+			DueDate:        req.DueDate,
+			EstimatedHours: req.EstimatedHours,
+			DoneRatio:      req.DoneRatio,
+			CustomFields:   req.CustomFields,
 		},
 	}
 
@@ -343,37 +376,79 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 	return &resp.Issue, nil
 }
 
-// UpdateIssueRequest describes an edit to an existing issue. Zero-value
-// fields are left unchanged on the server.
+// UpdateIssueRequest describes an edit to an existing issue.
+//
+// Every field is a pointer, and only the non-nil ones are sent: a nil field
+// is left exactly as it is on the server, while a pointer to a zero value is
+// transmitted explicitly. That distinction is what makes a field clearable —
+// the previous value-typed struct could not tell "leave the description
+// alone" apart from "set the description to empty", and silently chose the
+// former for both.
 type UpdateIssueRequest struct {
-	Subject      string
-	Description  string
-	TrackerID    int
-	PriorityID   int
-	AssignedTo   int
-	StatusID     int
-	CategoryID   int
-	ParentID     int
-	CustomFields []CustomField
+	Subject        *string
+	Description    *string
+	TrackerID      *int
+	PriorityID     *int
+	StatusID       *int
+	AssignedTo     *int // 0 clears the assignee
+	CategoryID     *int // 0 clears the category
+	ParentID       *int // 0 detaches from the parent issue
+	StartDate      *string
+	DueDate        *string
+	EstimatedHours *float64 // 0 clears the estimate
+	DoneRatio      *int     // 0 is a real value, not a clear
+	CustomFields   []CustomField
+}
+
+// fields renders the request as the sparse object Redmine expects.
+func (r UpdateIssueRequest) fields() map[string]any {
+	m := map[string]any{}
+	setIf(m, "subject", r.Subject)
+	setIf(m, "description", r.Description)
+	setIf(m, "tracker_id", r.TrackerID)
+	setIf(m, "priority_id", r.PriorityID)
+	setIf(m, "status_id", r.StatusID)
+	setIf(m, "start_date", r.StartDate)
+	setIf(m, "due_date", r.DueDate)
+	setIf(m, "done_ratio", r.DoneRatio)
+	if r.AssignedTo != nil {
+		m["assigned_to_id"] = clearable(*r.AssignedTo)
+	}
+	if r.CategoryID != nil {
+		m["category_id"] = clearable(*r.CategoryID)
+	}
+	if r.ParentID != nil {
+		m["parent_issue_id"] = clearable(*r.ParentID)
+	}
+	if r.EstimatedHours != nil {
+		m["estimated_hours"] = clearable(*r.EstimatedHours)
+	}
+	if len(r.CustomFields) > 0 {
+		m["custom_fields"] = r.CustomFields
+	}
+	return m
+}
+
+// setIf adds a field to the payload when the caller set it.
+func setIf[T any](m map[string]any, key string, v *T) {
+	if v != nil {
+		m[key] = *v
+	}
+}
+
+// clearable renders a numeric field that Redmine clears when given an empty
+// string. Sending 0 for these would be rejected as an invalid id rather than
+// understood as "unset it".
+func clearable[T int | float64](v T) any {
+	if v <= 0 {
+		return ""
+	}
+	return v
 }
 
 // UpdateIssue applies a partial update to an issue.
 func (c *Client) UpdateIssue(id int, req UpdateIssueRequest) error {
-	body := struct {
-		Issue issueFields `json:"issue"`
-	}{
-		Issue: issueFields{
-			Subject:      req.Subject,
-			Description:  req.Description,
-			TrackerID:    req.TrackerID,
-			PriorityID:   req.PriorityID,
-			AssignedTo:   req.AssignedTo,
-			StatusID:     req.StatusID,
-			CategoryID:   req.CategoryID,
-			ParentID:     req.ParentID,
-			CustomFields: req.CustomFields,
-		},
-	}
+	body := map[string]any{"issue": req.fields()}
 	return c.put(fmt.Sprintf("/issues/%d.json", id), body)
 }
 
