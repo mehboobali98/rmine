@@ -111,7 +111,9 @@ var timeListCmd = &cobra.Command{
 			return err
 		}
 
-		project, err = projectFilterOrDefault(project, allProjects)
+		// A named issue already determines the scope, so the profile default
+		// must not narrow it further.
+		project, err = projectFilterOrDefault(project, allProjects, issue != "")
 		if err != nil {
 			return err
 		}

@@ -62,6 +62,8 @@ rmine config set-default-project "AssetSonar Scrum Team"
 
 A profile's default project supplies `--project` wherever it's omitted: on `issue create`, and as the scope for `issue list` and `time list` — so the project you work in most doesn't need retyping. Pass `--all-projects` on the list commands to search everywhere regardless; combining it with `--project` is an error.
 
+`time list --issue <id>` is not scoped by the default: naming an issue already determines the project, so applying the default on top could only contradict it.
+
 Because that scoping comes from stored configuration rather than from the command you typed, the list commands note it on stderr when the default is what took effect. stdout stays clean, so `-o json` is unaffected.
 
 ## Commands

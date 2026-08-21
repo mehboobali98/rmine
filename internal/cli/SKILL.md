@@ -24,6 +24,9 @@ A profile may carry a default project (`rmine config set-default-project
 "X"`), which supplies `--project` wherever it is omitted: on `issue create`,
 and as the scope for `issue list` and `time list`.
 
+`time list --issue <id>` is **not** scoped by the default — naming an issue
+already determines the project, so the default would only ever contradict it.
+
 **A listing without `--project` may therefore be narrower than it looks.**
 When the default takes effect rmine says so on stderr — read that line before
 reporting a result as "everything there is". To search across all projects
