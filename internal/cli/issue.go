@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -568,9 +569,12 @@ func resolveIDFilter(flag, value string) (string, error) {
 }
 
 // resolveProjectFilter passes numeric IDs through unchanged and resolves a
-// display name (e.g. "AssetSonar Scrum Team") to its numeric ID via the
-// server's projects. Anything else (e.g. an identifier slug) is passed
-// through as-is for Redmine to validate.
+// display name or identifier to its numeric ID via the server's projects.
+//
+// It used to swallow every lookup error and pass the raw string on, which hid
+// two different problems behind one confusing server-side rejection: a
+// misspelled project name, and a lookup that never completed. The two are now
+// separated, because only one of them means the user got something wrong.
 func resolveProjectFilter(client *redmine.Client, project string) (string, error) {
 	if project == "" {
 		return "", nil
@@ -578,9 +582,20 @@ func resolveProjectFilter(client *redmine.Client, project string) (string, error
 	if _, err := strconv.Atoi(project); err == nil {
 		return project, nil
 	}
-	if id, err := client.ResolveProjectID(project); err == nil {
+
+	id, err := client.ResolveProjectID(project)
+	if err == nil {
 		return strconv.Itoa(id), nil
 	}
+	if errors.Is(err, redmine.ErrNoMatch) {
+		// The lookup worked and nothing matched: a typo, or a project this
+		// API key cannot see. Say so.
+		return "", err
+	}
+	// The lookup itself failed — no permission to list projects, a transport
+	// error. We have not established that the value is wrong, so pass it
+	// through: Redmine resolves identifiers server-side, and if the failure
+	// is real the request that follows surfaces it.
 	return project, nil
 }
 

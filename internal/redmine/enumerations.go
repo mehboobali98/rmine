@@ -1,9 +1,16 @@
 package redmine
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
+
+// ErrNoMatch reports that a lookup completed and nothing matched the given
+// name — as opposed to the lookup itself failing. Callers need to tell the
+// two apart: "you misspelled the project" and "we could not reach Redmine to
+// check" call for different handling.
+var ErrNoMatch = errors.New("no match")
 
 // IssueStatus is a Redmine issue status, including whether it's a "closed" state.
 type IssueStatus struct {
@@ -63,7 +70,7 @@ func findIDByName(items []IDName, name string) (int, error) {
 			return item.ID, nil
 		}
 	}
-	return 0, fmt.Errorf("no match for %q", name)
+	return 0, fmt.Errorf("%w for %q", ErrNoMatch, name)
 }
 
 // ResolveTrackerID resolves a tracker name (e.g. "Bug") to its ID.
@@ -116,7 +123,7 @@ func (c *Client) ResolveIssueStatusID(name string) (int, error) {
 			return s.ID, nil
 		}
 	}
-	return 0, fmt.Errorf("status: no match for %q", name)
+	return 0, fmt.Errorf("status: %w for %q", ErrNoMatch, name)
 }
 
 // DefaultClosedStatusID returns the ID of the first status flagged as
