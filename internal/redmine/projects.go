@@ -53,15 +53,27 @@ func (c *Client) ListProjects() ([]Project, error) {
 // GetProject fetches a single project by numeric ID or string identifier.
 func (c *Client) GetProject(idOrIdentifier string) (*Project, error) {
 	var resp projectResponse
-	if err := c.get(fmt.Sprintf("/projects/%s.json", idOrIdentifier), nil, &resp); err != nil {
+	if err := c.get("/projects/"+url.PathEscape(idOrIdentifier)+".json", nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Project, nil
 }
 
 // ResolveProjectID resolves a project's display name or identifier, matched
-// case-insensitively, to its numeric ID.
+// case-insensitively, to its numeric ID. It returns an error wrapping
+// ErrNoMatch when the lookup succeeded but nothing matched.
 func (c *Client) ResolveProjectID(name string) (int, error) {
+	// An identifier can be fetched directly, so try that before paging
+	// through every project the user can see just to match one string — on a
+	// large instance that listing costs more than the command it precedes.
+	// A display name that happens to be identifier-shaped resolves by
+	// identifier first; both are legitimate matches, only the order differs.
+	if looksLikeIdentifier(name) {
+		if p, err := c.GetProject(name); err == nil && p.ID != 0 {
+			return p.ID, nil
+		}
+	}
+
 	projects, err := c.ListProjects()
 	if err != nil {
 		return 0, err
@@ -71,7 +83,24 @@ func (c *Client) ResolveProjectID(name string) (int, error) {
 			return p.ID, nil
 		}
 	}
-	return 0, fmt.Errorf("project: no match for %q", name)
+	return 0, fmt.Errorf("project: %w for %q", ErrNoMatch, name)
+}
+
+// looksLikeIdentifier reports whether s has the shape of a Redmine project
+// identifier: lowercase letters, digits, dashes and underscores. Anything
+// else — spaces, capitals — can only be a display name.
+func looksLikeIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // ListIssueCategories returns the issue categories defined on one project.
@@ -81,7 +110,7 @@ func (c *Client) ListIssueCategories(projectIDOrIdentifier string) ([]IDName, er
 	var resp struct {
 		IssueCategories []IDName `json:"issue_categories"`
 	}
-	if err := c.get(fmt.Sprintf("/projects/%s/issue_categories.json", projectIDOrIdentifier), nil, &resp); err != nil {
+	if err := c.get("/projects/"+url.PathEscape(projectIDOrIdentifier)+"/issue_categories.json", nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.IssueCategories, nil
