@@ -25,6 +25,7 @@ type TimeEntryListFilter struct {
 	UserID    string
 	From      string // spent_on >= From (YYYY-MM-DD)
 	To        string // spent_on <= To (YYYY-MM-DD)
+	Sort      string // Redmine sort spec, e.g. "spent_on:desc"
 	Limit     int
 	All       bool
 }
@@ -55,6 +56,9 @@ func (c *Client) ListTimeEntries(f TimeEntryListFilter) ([]TimeEntry, error) {
 	}
 	if f.From != "" || f.To != "" {
 		base.Set("spent_on", spentOnRange(f.From, f.To))
+	}
+	if f.Sort != "" {
+		base.Set("sort", f.Sort)
 	}
 
 	want := f.Limit

@@ -98,9 +98,14 @@ var timeListCmd = &cobra.Command{
 		user, _ := cmd.Flags().GetString("user")
 		from, _ := cmd.Flags().GetString("from")
 		to, _ := cmd.Flags().GetString("to")
+		sort, _ := cmd.Flags().GetString("sort")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
 
+		sort, err := normalizeSort(sort)
+		if err != nil {
+			return err
+		}
 		if err := validateDates(dateFlag{"--from", from}, dateFlag{"--to", to}); err != nil {
 			return err
 		}
@@ -129,6 +134,7 @@ var timeListCmd = &cobra.Command{
 			UserID:    user,
 			From:      from,
 			To:        to,
+			Sort:      sort,
 			Limit:     limit,
 			All:       all,
 		}
@@ -249,6 +255,7 @@ func init() {
 	timeListCmd.Flags().String("user", "", "filter by user ID (or \"me\" for the authenticated user)")
 	timeListCmd.Flags().String("from", "", "only entries spent on or after this date (YYYY-MM-DD)")
 	timeListCmd.Flags().String("to", "", "only entries spent on or before this date (YYYY-MM-DD)")
+	timeListCmd.Flags().String("sort", "", "sort order, e.g. spent_on or \"spent_on:desc\"")
 	timeListCmd.Flags().Int("limit", 25, "maximum number of entries to return")
 	timeListCmd.Flags().Bool("all", false, "fetch every matching entry, ignoring --limit")
 

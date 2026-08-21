@@ -146,6 +146,7 @@ type IssueListFilter struct {
 	UpdatedBefore string // YYYY-MM-DD
 	DueAfter      string // YYYY-MM-DD
 	DueBefore     string // YYYY-MM-DD
+	Sort          string // Redmine sort spec, e.g. "due_date:asc,priority:desc"
 	Limit         int    // 0 means "use Redmine's default page size"
 	All           bool   // ignore Limit and fetch every matching issue
 }
@@ -249,6 +250,10 @@ func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 		if f.DueAfter != "" || f.DueBefore != "" {
 			base.Set("due_date", dateRangeFilter(f.DueAfter, f.DueBefore))
 		}
+	}
+
+	if f.Sort != "" {
+		base.Set("sort", f.Sort)
 	}
 
 	want := f.Limit
