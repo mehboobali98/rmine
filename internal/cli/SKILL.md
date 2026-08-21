@@ -119,6 +119,12 @@ filter syntax under the hood, which does **not** default to open-only —
 expect closed issues in results too unless you also pass `--status open`.
 `--limit` defaults to 25; pass `--all` to fetch every matching result instead.
 
+`--sort` (on `issue list` and `time list`) takes Redmine's sort syntax: a
+column, optionally suffixed `:asc` or `:desc`, comma-separated for tie-breaks
+— `--sort due_date`, `--sort "priority:desc,due_date:asc"`. Useful columns:
+`due_date`, `priority`, `updated_on`, `created_on`, `status`, `spent_on` (time
+entries). Custom fields sort as `cf_<id>`.
+
 ## Attachments and comments
 
 `rmine issue view <id>` reports the issue's dates, progress, estimate,
@@ -161,14 +167,14 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine project list` | Browse projects |
 | `rmine project view <id>` | One project's details |
 | `rmine project categories <project>` | List a project's issue categories |
-| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--limit`, `--all` |
+| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all` |
 | `rmine issue view <id>` | Full issue detail, custom fields, web `url`, and attachments; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
 | `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field` |
 | `rmine issue update <id>` | Same optional flags as create, plus `--status` |
 | `rmine issue close <id>` | `--status` to pick a specific closed status |
 | `rmine issue comment <id> <note>` | Add a comment |
-| `rmine time log/list/edit/delete` | See above; log takes an issue ID or `--project`, plus `--hours` (required), `--date`, `--activity`, `--comment`; list takes `--issue`, `--project`, `--user`, `--from`, `--to`, `--limit`, `--all`; delete prompts unless `--force` |
+| `rmine time log/list/edit/delete` | See above; log takes an issue ID or `--project`, plus `--hours` (required), `--date`, `--activity`, `--comment`; list takes `--issue`, `--project`, `--user`, `--from`, `--to`, `--sort`, `--limit`, `--all`; delete prompts unless `--force` |
 | `rmine config init/add-profile/use-profile/list-profiles` | Manage server profiles |
 | `rmine skill install` | (Re)install this skill file (`--local` for the current project, `--force` to overwrite a file rmine didn't write) |
 | `rmine skill uninstall` | Remove it again (same flags) |

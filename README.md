@@ -47,6 +47,8 @@ rmine issue list --project "AssetSonar Scrum Team" --status "in progress" --due-
 
 `--project`, `--status`, `--tracker` and `--category` match names case-insensitively (`in progress` finds `In Progress`), so you don't need exact server casing. `--due-within N`, `--due-next-week` and `--overdue` compute the date range for you; `--due-after`/`--due-before` take explicit `YYYY-MM-DD` dates if you need a custom range.
 
+`--sort` takes Redmine's sort syntax — a column, optionally `:asc` or `:desc`, comma-separated for tie-breaks: `--sort due_date`, `--sort "priority:desc,due_date:asc"`.
+
 ## Multiple servers
 
 ```sh
@@ -66,7 +68,7 @@ rmine config list-profiles
 | `rmine project list` | Browse projects |
 | `rmine project view <id>` | Show one project's details |
 | `rmine project categories <project>` | List a project's issue categories |
-| `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--limit`, `--all`) |
+| `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`) |
 | `rmine issue view <id>` | Show issue details, its web link and attachments (`--comments` to also fetch comments) |
 | `rmine issue attachments <id>` | List an issue's attachments (`--download <dir>` to save them all) |
 | `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`) |
@@ -74,7 +76,7 @@ rmine config list-profiles
 | `rmine issue close <id>` | Close an issue (`--status` to pick a specific closed status) |
 | `rmine issue comment <id> <note>` | Add a comment |
 | `rmine time log [issue-id]` | Log time against an issue, or a project with `--project` (`--hours` required; `--date`, `--activity`, `--comment`) |
-| `rmine time list` | List time entries (`--issue`, `--project`, `--user`, `--from`, `--to`, `--limit`, `--all`) |
+| `rmine time list` | List time entries (`--issue`, `--project`, `--user`, `--from`, `--to`, `--sort`, `--limit`, `--all`) |
 | `rmine time edit <id>` | Edit a time entry |
 | `rmine time delete <id>` | Delete a time entry (prompts unless `-y`/`--force`) |
 | `rmine config init` / `add-profile` / `use-profile` / `list-profiles` | Manage server profiles |

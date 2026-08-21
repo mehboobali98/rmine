@@ -312,3 +312,38 @@ func TestResolveIDFilterRejectsNonNumeric(t *testing.T) {
 		t.Error("expected an error for a non-numeric issue filter")
 	}
 }
+
+func TestNormalizeSort(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", ""},
+		{"   ", ""},
+		{"due_date", "due_date"},
+		{"due_date:asc", "due_date:asc"},
+		{"priority:desc,due_date:asc", "priority:desc,due_date:asc"},
+		{"cf_12:desc", "cf_12:desc"}, // custom fields sort too, so no whitelist
+		// Whitespace is stripped rather than forwarded into the query.
+		{"priority:desc, due_date:asc", "priority:desc,due_date:asc"},
+		{" due_date : asc ", "due_date:asc"},
+	}
+	for _, c := range cases {
+		got, err := normalizeSort(c.in)
+		if err != nil {
+			t.Errorf("normalizeSort(%q): %v", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("normalizeSort(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+
+	for _, bad := range []string{
+		"due_date:up",
+		"due_date:ASC",
+		",due_date",
+		"due_date,,priority",
+	} {
+		if _, err := normalizeSort(bad); err == nil {
+			t.Errorf("normalizeSort(%q): expected an error", bad)
+		}
+	}
+}

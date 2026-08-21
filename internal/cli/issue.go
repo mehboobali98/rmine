@@ -35,9 +35,14 @@ var issueListCmd = &cobra.Command{
 		dueWithin, _ := cmd.Flags().GetInt("due-within")
 		dueNextWeek, _ := cmd.Flags().GetBool("due-next-week")
 		overdue, _ := cmd.Flags().GetBool("overdue")
+		sort, _ := cmd.Flags().GetString("sort")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
 
+		sort, err := normalizeSort(sort)
+		if err != nil {
+			return err
+		}
 		if err := validateDates(
 			dateFlag{"--updated-after", updatedAfter},
 			dateFlag{"--updated-before", updatedBefore},
@@ -83,6 +88,7 @@ var issueListCmd = &cobra.Command{
 			UpdatedBefore: updatedBefore,
 			DueAfter:      dueAfter,
 			DueBefore:     dueBefore,
+			Sort:          sort,
 			Limit:         limit,
 			All:           all,
 		}
@@ -523,6 +529,7 @@ func init() {
 	issueListCmd.Flags().Int("due-within", 0, "only issues due within this many days from today")
 	issueListCmd.Flags().Bool("due-next-week", false, "only issues due next week (Mon-Sun)")
 	issueListCmd.Flags().Bool("overdue", false, "only issues whose due date has already passed")
+	issueListCmd.Flags().String("sort", "", "sort order, e.g. due_date or \"priority:desc,due_date:asc\"")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
 
@@ -592,6 +599,44 @@ func flagFloat64(cmd *cobra.Command, name string) *float64 {
 	}
 	v, _ := cmd.Flags().GetFloat64(name)
 	return &v
+}
+
+// normalizeSort checks the shape of a Redmine sort spec — comma-separated
+// columns, each optionally suffixed with :asc or :desc — and returns it with
+// incidental whitespace removed. It normalizes rather than only validating
+// so that a spec accepted here is exactly what reaches the server: `--sort
+// "priority:desc, due_date:asc"` is a natural thing to type, and the space
+// after the comma would otherwise travel into the query.
+//
+// Column names are deliberately not checked against a list. Redmine sorts on
+// custom fields too (cf_12), which vary per instance, so a whitelist would
+// reject valid input; a bad column is one of the few things Redmine does
+// report clearly.
+func normalizeSort(spec string) (string, error) {
+	if strings.TrimSpace(spec) == "" {
+		return "", nil
+	}
+
+	parts := strings.Split(spec, ",")
+	cleaned := make([]string, 0, len(parts))
+	for _, part := range parts {
+		column, direction, hasDirection := strings.Cut(strings.TrimSpace(part), ":")
+		column = strings.TrimSpace(column)
+		direction = strings.TrimSpace(direction)
+
+		if column == "" {
+			return "", fmt.Errorf("--sort has an empty column in %q", spec)
+		}
+		if !hasDirection {
+			cleaned = append(cleaned, column)
+			continue
+		}
+		if direction != "asc" && direction != "desc" {
+			return "", fmt.Errorf("--sort direction must be asc or desc, got %q in %q", direction, spec)
+		}
+		cleaned = append(cleaned, column+":"+direction)
+	}
+	return strings.Join(cleaned, ","), nil
 }
 
 // dateFlag pairs a flag name with the value the user gave it, so a rejection
