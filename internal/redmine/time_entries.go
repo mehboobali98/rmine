@@ -25,6 +25,7 @@ type TimeEntryListFilter struct {
 	UserID    string
 	From      string // spent_on >= From (YYYY-MM-DD)
 	To        string // spent_on <= To (YYYY-MM-DD)
+	Sort      string // Redmine sort spec, e.g. "spent_on:desc"
 	Limit     int
 	All       bool
 }
@@ -55,6 +56,9 @@ func (c *Client) ListTimeEntries(f TimeEntryListFilter) ([]TimeEntry, error) {
 	}
 	if f.From != "" || f.To != "" {
 		base.Set("spent_on", spentOnRange(f.From, f.To))
+	}
+	if f.Sort != "" {
+		base.Set("sort", f.Sort)
 	}
 
 	want := f.Limit
@@ -113,6 +117,9 @@ type CreateTimeEntryRequest struct {
 	SpentOn    string // YYYY-MM-DD; empty means "today" per Redmine's default
 }
 
+// timeEntryFields is CreateTimeEntryRequest's wire form. It carries the same
+// fields in the same order on purpose, so the two convert directly rather
+// than needing a copy that has to be kept in step field by field.
 type timeEntryFields struct {
 	IssueID    int     `json:"issue_id,omitempty"`
 	ProjectID  string  `json:"project_id,omitempty"`
@@ -127,14 +134,7 @@ func (c *Client) CreateTimeEntry(req CreateTimeEntryRequest) (*TimeEntry, error)
 	body := struct {
 		TimeEntry timeEntryFields `json:"time_entry"`
 	}{
-		TimeEntry: timeEntryFields{
-			IssueID:    req.IssueID,
-			ProjectID:  req.ProjectID,
-			Hours:      req.Hours,
-			ActivityID: req.ActivityID,
-			Comments:   req.Comments,
-			SpentOn:    req.SpentOn,
-		},
+		TimeEntry: timeEntryFields(req),
 	}
 
 	var resp timeEntryResponse

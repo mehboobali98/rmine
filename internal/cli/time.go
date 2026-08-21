@@ -98,10 +98,21 @@ var timeListCmd = &cobra.Command{
 		user, _ := cmd.Flags().GetString("user")
 		from, _ := cmd.Flags().GetString("from")
 		to, _ := cmd.Flags().GetString("to")
+		allProjects, _ := cmd.Flags().GetBool("all-projects")
+		sort, _ := cmd.Flags().GetString("sort")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
 
+		sort, err := normalizeSort(sort)
+		if err != nil {
+			return err
+		}
 		if err := validateDates(dateFlag{"--from", from}, dateFlag{"--to", to}); err != nil {
+			return err
+		}
+
+		project, err = projectFilterOrDefault(project, allProjects)
+		if err != nil {
 			return err
 		}
 
@@ -110,11 +121,12 @@ var timeListCmd = &cobra.Command{
 			return err
 		}
 
+		projectArg := project
 		project, err = resolveProjectFilter(client, project)
 		if err != nil {
 			return err
 		}
-		user, err = resolveUserFilter("--user", user)
+		user, err = resolveUserFilter(client, "--user", user, projectArg)
 		if err != nil {
 			return err
 		}
@@ -129,6 +141,7 @@ var timeListCmd = &cobra.Command{
 			UserID:    user,
 			From:      from,
 			To:        to,
+			Sort:      sort,
 			Limit:     limit,
 			All:       all,
 		}
@@ -245,10 +258,12 @@ func init() {
 	_ = timeLogCmd.MarkFlagRequired("hours")
 
 	timeListCmd.Flags().String("issue", "", "filter by issue ID")
-	timeListCmd.Flags().String("project", "", "filter by project ID, identifier, or name")
-	timeListCmd.Flags().String("user", "", "filter by user ID (or \"me\" for the authenticated user)")
+	timeListCmd.Flags().String("project", "", "filter by project ID, identifier, or name (defaults to the profile's default project)")
+	timeListCmd.Flags().Bool("all-projects", false, "include every project, ignoring the profile's default project")
+	timeListCmd.Flags().String("user", "", "filter by user: user ID, \"me\", or a name (needs --project to resolve a name)")
 	timeListCmd.Flags().String("from", "", "only entries spent on or after this date (YYYY-MM-DD)")
 	timeListCmd.Flags().String("to", "", "only entries spent on or before this date (YYYY-MM-DD)")
+	timeListCmd.Flags().String("sort", "", "sort order, e.g. spent_on or \"spent_on:desc\"")
 	timeListCmd.Flags().Int("limit", 25, "maximum number of entries to return")
 	timeListCmd.Flags().Bool("all", false, "fetch every matching entry, ignoring --limit")
 

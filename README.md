@@ -47,6 +47,8 @@ rmine issue list --project "AssetSonar Scrum Team" --status "in progress" --due-
 
 `--project`, `--status`, `--tracker` and `--category` match names case-insensitively (`in progress` finds `In Progress`), so you don't need exact server casing. `--due-within N`, `--due-next-week` and `--overdue` compute the date range for you; `--due-after`/`--due-before` take explicit `YYYY-MM-DD` dates if you need a custom range.
 
+`--sort` takes Redmine's sort syntax — a column, optionally `:asc` or `:desc`, comma-separated for tie-breaks: `--sort due_date`, `--sort "priority:desc,due_date:asc"`.
+
 ## Multiple servers
 
 ```sh
@@ -55,7 +57,12 @@ rmine config use-profile work        # switch persistently
 rmine --profile work issue list      # or override for one command
 RMINE_PROFILE=work rmine issue list  # or via env var
 rmine config list-profiles
+rmine config set-default-project "AssetSonar Scrum Team"
 ```
+
+A profile's default project supplies `--project` wherever it's omitted: on `issue create`, and as the scope for `issue list` and `time list` — so the project you work in most doesn't need retyping. Pass `--all-projects` on the list commands to search everywhere regardless; combining it with `--project` is an error.
+
+Because that scoping comes from stored configuration rather than from the command you typed, the list commands note it on stderr when the default is what took effect. stdout stays clean, so `-o json` is unaffected.
 
 ## Commands
 
@@ -66,7 +73,7 @@ rmine config list-profiles
 | `rmine project list` | Browse projects |
 | `rmine project view <id>` | Show one project's details |
 | `rmine project categories <project>` | List a project's issue categories |
-| `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--limit`, `--all`) |
+| `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects`) |
 | `rmine issue view <id>` | Show issue details, its web link and attachments (`--comments` to also fetch comments) |
 | `rmine issue attachments <id>` | List an issue's attachments (`--download <dir>` to save them all) |
 | `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`) |
@@ -74,10 +81,11 @@ rmine config list-profiles
 | `rmine issue close <id>` | Close an issue (`--status` to pick a specific closed status) |
 | `rmine issue comment <id> <note>` | Add a comment |
 | `rmine time log [issue-id]` | Log time against an issue, or a project with `--project` (`--hours` required; `--date`, `--activity`, `--comment`) |
-| `rmine time list` | List time entries (`--issue`, `--project`, `--user`, `--from`, `--to`, `--limit`, `--all`) |
+| `rmine time list` | List time entries (`--issue`, `--project`, `--user`, `--from`, `--to`, `--sort`, `--limit`, `--all`, `--all-projects`) |
 | `rmine time edit <id>` | Edit a time entry |
 | `rmine time delete <id>` | Delete a time entry (prompts unless `-y`/`--force`) |
 | `rmine config init` / `add-profile` / `use-profile` / `list-profiles` | Manage server profiles |
+| `rmine config set-default-project <project>` | Set the active profile's default project (`""` clears it) |
 | `rmine skill install` / `uninstall` | Install or remove the rmine Claude Code skill (`--local` for this project, `--force` to overwrite a file rmine didn't write) |
 
 Every command accepts `-o`/`--output json` and `--profile <name>` to target a specific server for that one call.
@@ -92,7 +100,7 @@ For unattended setup, `$RMINE_URL` and `$RMINE_API_KEY` supply the two values `r
 
 ## Field notes
 
-Assignees are set and filtered by numeric Redmine user ID (or the literal `me`); looking other users up by name isn't in scope, and passing a name is an error rather than a silently empty result.
+Assignees can be given as a numeric Redmine user ID, the literal `me`, or a person's name. Names are resolved against the project's member list — `/users.json` is admin-only on most instances, while a project's memberships are readable by its members — so a name needs a project in scope: `--project` on `issue list`, and the issue's own project on `issue update`. An exact name wins; failing that a single substring match is accepted, so `--assignee jane` finds Jane Doe. A name matching several members is an error listing them rather than a guess, since assigning work to the wrong person isn't something the caller can detect. If your API key can't read a project's member list, pass a numeric ID.
 
 Custom fields differ per Redmine instance (and sometimes per project/tracker), so they're set generically by numeric ID: `--field 12=staging`, repeatable to set several distinct fields. Passing the same ID more than once (`--field 11=16 --field 11=27`) instead sets that one field to multiple values, for checkbox/multi-select fields. Find a field's ID by inspecting an existing issue that has it set: `rmine issue view <id> -o json`.
 
