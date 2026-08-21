@@ -38,6 +38,7 @@ warnings go to stderr, so stdout is always parseable on its own.
 - "what's overdue" → `rmine issue list --assignee me --overdue`
 - "in progress issues for team X due next week" → `rmine issue list --project "X" --status "in progress" --due-next-week`
 - "log 0.5h on ticket 1234" → `rmine time log 1234 --hours 0.5 --activity Development --comment "..."`
+- "log 1h of meetings against project X" → `rmine time log --project "X" --hours 1 --activity Development --comment "..."`
 - "how much did I work today" → `rmine time list --user me --from <today> --to <today>`
 - "create a ticket in project X titled ..." → `rmine issue create --project "X" --subject "..." --tracker Bug`
 - "update ticket 1234 to in progress, assign to 42" → `rmine issue update 1234 --status "In Progress" --assignee 42`
@@ -121,7 +122,9 @@ expect closed issues in results too unless you also pass `--status open`.
 ## Attachments and comments
 
 `rmine issue view <id>` reports the issue's dates, progress, estimate,
-parent and target version alongside the usual fields, and always carries its
+parent, target version and its **`url`** in the Redmine web UI alongside the
+usual fields — quote that link when reporting an issue to a person, rather
+than the bare number. `issue list -o json` carries `url` per issue too, and always carries its
 **attachments** (id, filename, content type, size). **Comments** are extra — a long issue's history
 dwarfs the issue itself — so pass `--comments` when you need them. In `-o json`
 they land under `attachments` and `journals`; a journal with empty `notes` is a
@@ -141,7 +144,10 @@ leaving a truncated one behind.
 ## Time entries
 
 `rmine time log <issue-id> --hours <n> [--date YYYY-MM-DD] [--activity
-<name>] [--comment <text>]` (date defaults to today). `rmine time list`
+<name>] [--comment <text>]` (date defaults to today). For time that is not
+attached to a ticket — meetings, planning, support rotations — log against a
+project instead: `rmine time log --project "X" --hours 1`. Exactly one of the
+issue ID or `--project` is required; passing both is an error. `rmine time list`
 (`--issue`, `--project`, `--user`, `--from`, `--to`) also prints a total
 across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 (delete prompts unless `-y`/`--force`).
@@ -156,13 +162,13 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine project view <id>` | One project's details |
 | `rmine project categories <project>` | List a project's issue categories |
 | `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--limit`, `--all` |
-| `rmine issue view <id>` | Full issue detail, custom fields, and attachments; `--comments` to also fetch comments |
+| `rmine issue view <id>` | Full issue detail, custom fields, web `url`, and attachments; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
 | `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field` |
 | `rmine issue update <id>` | Same optional flags as create, plus `--status` |
 | `rmine issue close <id>` | `--status` to pick a specific closed status |
 | `rmine issue comment <id> <note>` | Add a comment |
-| `rmine time log/list/edit/delete` | See above; log takes `--hours` (required), `--date`, `--activity`, `--comment`; list takes `--issue`, `--project`, `--user`, `--from`, `--to`, `--limit`, `--all`; delete prompts unless `--force` |
+| `rmine time log/list/edit/delete` | See above; log takes an issue ID or `--project`, plus `--hours` (required), `--date`, `--activity`, `--comment`; list takes `--issue`, `--project`, `--user`, `--from`, `--to`, `--limit`, `--all`; delete prompts unless `--force` |
 | `rmine config init/add-profile/use-profile/list-profiles` | Manage server profiles |
 | `rmine skill install` | (Re)install this skill file (`--local` for the current project, `--force` to overwrite a file rmine didn't write) |
 | `rmine skill uninstall` | Remove it again (same flags) |
