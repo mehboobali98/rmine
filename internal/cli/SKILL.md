@@ -11,7 +11,8 @@ instead after upgrading rmine.
 ## Setup and profiles
 
 `rmine` needs a profile before anything else works: `rmine config init`
-(interactive; prompts for server URL + API key). Multiple servers: `rmine
+(interactive; prompts for server URL + API key, or reads `$RMINE_URL` and
+`$RMINE_API_KEY` when set, for unattended setup). Multiple servers: `rmine
 config add-profile <name>`, `rmine config use-profile <name>` (persistent
 switch), `rmine --profile <name> ...` or `RMINE_PROFILE=<name>` (one-off
 override, flag beats env beats the configured current profile), `rmine
@@ -19,39 +20,56 @@ config list-profiles`.
 
 ## Output format
 
-Default output is a human-readable table. Pass `-o json` on any command when
+Default output is a human-readable table. Pass `-o json` (long form
+`--output json`) on any command when
 you intend to parse the result programmatically — always prefer this over
 scraping table output.
+
+`-o json` works on **every** command, including the ones that change
+something: those return `{"status": "...", "issue": 1234}` (or `time_entry`,
+`profile`, `path`), so a write can be confirmed by parsing rather than by
+matching English. Empty lists come back as `[]`, never `null`. Prompts and
+warnings go to stderr, so stdout is always parseable on its own.
 
 ## Common request → command mappings
 
 - "my issues due in 2 days" → `rmine issue list --assignee me --due-within 2`
 - "issues due next week in project X" → `rmine issue list --project "X" --due-next-week`
+- "what's overdue" → `rmine issue list --assignee me --overdue`
 - "in progress issues for team X due next week" → `rmine issue list --project "X" --status "in progress" --due-next-week`
 - "log 0.5h on ticket 1234" → `rmine time log 1234 --hours 0.5 --activity Development --comment "..."`
 - "how much did I work today" → `rmine time list --user me --from <today> --to <today>`
 - "create a ticket in project X titled ..." → `rmine issue create --project "X" --subject "..." --tracker Bug`
 - "update ticket 1234 to in progress, assign to 42" → `rmine issue update 1234 --status "In Progress" --assignee 42`
 - "close ticket 1234" → `rmine issue close 1234`
+- "push ticket 1234's due date to Friday" → `rmine issue update 1234 --due-date 2026-08-28`
+- "unassign ticket 1234" → `rmine issue update 1234 --assignee 0`
 - "comment on ticket 1234: ..." → `rmine issue comment 1234 "..."`
 
 ## Name matching gotchas
 
-`--project`, `--status`, and `--category` all match case-insensitively by
-name (`in progress` finds `In Progress`, `assetsonar scrum team` finds
-`AssetSonar Scrum Team`) — no need for exact server casing.
+`--project`, `--status`, `--tracker` and `--category` all match
+case-insensitively by name (`in progress` finds `In Progress`, `assetsonar
+scrum team` finds `AssetSonar Scrum Team`) — no need for exact server casing.
 
-`--assignee` is a numeric Redmine user ID, or the literal `me` for the
-authenticated user — **that's it**. There is no name-to-ID lookup for other
-users; don't guess or invent one.
+`--assignee` and `time list --user` are a numeric Redmine user ID, or the
+literal `me` for the authenticated user — **that's it**. There is no
+name-to-ID lookup for other users; don't guess or invent one. Passing a name
+is rejected with an error rather than answered with an empty list.
 
 ## Due date filters
 
-`--due-within N` (due within the next N days from today) and
-`--due-next-week` (next Mon–Sun) compute the range for you. `--due-after` /
-`--due-before` take explicit `YYYY-MM-DD` dates for a custom range. The
-shortcuts and the explicit dates are mutually exclusive with each other —
-combining them errors.
+`--due-within N` (due within the next N days from today), `--due-next-week`
+(next Mon–Sun) and `--overdue` (due before today) compute the range for you.
+`--due-after` / `--due-before` take explicit `YYYY-MM-DD` dates for a custom
+range. The shortcuts and the explicit dates are mutually exclusive with each
+other — combining them errors.
+
+Note that `--due-within N` counts forward from today and so **excludes**
+anything already late; `--overdue` is the flag for what has been missed.
+
+Every date flag must be `YYYY-MM-DD` and is validated before the request goes
+out, so a malformed date is an error rather than an empty result.
 
 ## Custom fields
 
@@ -66,6 +84,19 @@ API is admin-only. Set them generically by numeric ID:
 
 Find a field's ID by inspecting an existing issue that already has it set:
 `rmine issue view <id> -o json`.
+
+## Setting and clearing fields
+
+`issue create` and `issue update` take `--start-date`, `--due-date`,
+`--estimated-hours` and `--done-ratio` alongside the usual fields.
+
+On `update`, a flag you don't pass is left untouched on the server, and an
+explicitly empty one clears the field:
+
+- `--assignee 0` unassigns, `--parent 0` detaches from the parent
+- `--category ""` removes the category, `--estimated-hours 0` drops the estimate
+- `--description ""` empties the description
+- `--done-ratio 0` is a real value (0%), **not** a clear
 
 ## Categories
 
@@ -89,8 +120,9 @@ expect closed issues in results too unless you also pass `--status open`.
 
 ## Attachments and comments
 
-`rmine issue view <id>` always carries the issue's **attachments** (id,
-filename, content type, size). **Comments** are extra — a long issue's history
+`rmine issue view <id>` reports the issue's dates, progress, estimate,
+parent and target version alongside the usual fields, and always carries its
+**attachments** (id, filename, content type, size). **Comments** are extra — a long issue's history
 dwarfs the issue itself — so pass `--comments` when you need them. In `-o json`
 they land under `attachments` and `journals`; a journal with empty `notes` is a
 bare field change, not a comment, and is worth skipping.
@@ -119,17 +151,20 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | Command | Notes |
 |---|---|
 | `rmine whoami` | Active profile's authenticated user |
-| `rmine project list` / `view <id>` | Browse projects |
+| `rmine version` | The running rmine's version |
+| `rmine project list` | Browse projects |
+| `rmine project view <id>` | One project's details |
 | `rmine project categories <project>` | List a project's issue categories |
-| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after/-before`, `--due-after/-before`, `--due-within`, `--due-next-week`, `--limit`, `--all` |
+| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--limit`, `--all` |
 | `rmine issue view <id>` | Full issue detail, custom fields, and attachments; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
-| `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--field` |
+| `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field` |
 | `rmine issue update <id>` | Same optional flags as create, plus `--status` |
 | `rmine issue close <id>` | `--status` to pick a specific closed status |
 | `rmine issue comment <id> <note>` | Add a comment |
-| `rmine time log/list/edit/delete` | See above |
+| `rmine time log/list/edit/delete` | See above; log takes `--hours` (required), `--date`, `--activity`, `--comment`; list takes `--issue`, `--project`, `--user`, `--from`, `--to`, `--limit`, `--all`; delete prompts unless `--force` |
 | `rmine config init/add-profile/use-profile/list-profiles` | Manage server profiles |
-| `rmine skill install` | (Re)install this skill file |
+| `rmine skill install` | (Re)install this skill file (`--local` for the current project, `--force` to overwrite a file rmine didn't write) |
+| `rmine skill uninstall` | Remove it again (same flags) |
 
-Every command accepts `-o json` and `--profile <name>`.
+Every command accepts `-o`/`--output json` and `--profile <name>`.
