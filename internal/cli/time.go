@@ -18,19 +18,31 @@ var timeCmd = &cobra.Command{
 }
 
 var timeLogCmd = &cobra.Command{
-	Use:   "log <issue-id>",
-	Short: "Log time against an issue",
-	Args:  cobra.ExactArgs(1),
+	Use:   "log [issue-id]",
+	Short: "Log time against an issue, or against a project with --project",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		issueID, err := parseIssueID(args[0])
-		if err != nil {
-			return err
-		}
-
+		project, _ := cmd.Flags().GetString("project")
 		hours, _ := cmd.Flags().GetFloat64("hours")
 		date, _ := cmd.Flags().GetString("date")
 		activityName, _ := cmd.Flags().GetString("activity")
 		comment, _ := cmd.Flags().GetString("comment")
+
+		// Redmine attaches a time entry to exactly one of an issue or a
+		// project, so requiring the same here turns an ambiguous command into
+		// an error before it reaches the server.
+		var issueID int
+		switch {
+		case len(args) == 1 && project != "":
+			return fmt.Errorf("pass an issue ID or --project, not both")
+		case len(args) == 0 && project == "":
+			return fmt.Errorf("pass an issue ID, or --project to log against a project instead")
+		case len(args) == 1:
+			var err error
+			if issueID, err = parseIssueID(args[0]); err != nil {
+				return err
+			}
+		}
 
 		if err := validateDates(dateFlag{"--date", date}); err != nil {
 			return err
@@ -41,11 +53,17 @@ var timeLogCmd = &cobra.Command{
 			return err
 		}
 
+		project, err = resolveProjectFilter(client, project)
+		if err != nil {
+			return err
+		}
+
 		req := redmine.CreateTimeEntryRequest{
-			IssueID:  issueID,
-			Hours:    hours,
-			Comments: comment,
-			SpentOn:  date,
+			IssueID:   issueID,
+			ProjectID: project,
+			Hours:     hours,
+			Comments:  comment,
+			SpentOn:   date,
 		}
 		if activityName != "" {
 			req.ActivityID, err = client.ResolveTimeEntryActivityID(activityName)
@@ -62,7 +80,11 @@ var timeLogCmd = &cobra.Command{
 		if wantsJSON() {
 			return printJSON(entry)
 		}
-		fmt.Printf("Logged %.2fh on issue #%d (entry #%d)\n", entry.Hours, issueID, entry.ID)
+		if issueID != 0 {
+			fmt.Printf("Logged %.2fh on issue #%d (entry #%d)\n", entry.Hours, issueID, entry.ID)
+		} else {
+			fmt.Printf("Logged %.2fh on project %s (entry #%d)\n", entry.Hours, entry.Project.Name, entry.ID)
+		}
 		return nil
 	},
 }
@@ -215,6 +237,7 @@ var timeDeleteCmd = &cobra.Command{
 }
 
 func init() {
+	timeLogCmd.Flags().String("project", "", "log against this project instead of an issue (ID, identifier, or name)")
 	timeLogCmd.Flags().Float64("hours", 0, "hours spent (required)")
 	timeLogCmd.Flags().String("date", "", "date the time was spent, YYYY-MM-DD (defaults to today)")
 	timeLogCmd.Flags().String("activity", "", "activity name, e.g. Development")

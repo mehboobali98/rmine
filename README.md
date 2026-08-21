@@ -73,7 +73,7 @@ rmine config list-profiles
 | `rmine issue update <id>` | Edit an issue (same optional flags as create, plus `--status`) |
 | `rmine issue close <id>` | Close an issue (`--status` to pick a specific closed status) |
 | `rmine issue comment <id> <note>` | Add a comment |
-| `rmine time log <issue-id>` | Log time (`--hours` required; `--date`, `--activity`, `--comment`) |
+| `rmine time log [issue-id]` | Log time against an issue, or a project with `--project` (`--hours` required; `--date`, `--activity`, `--comment`) |
 | `rmine time list` | List time entries (`--issue`, `--project`, `--user`, `--from`, `--to`, `--limit`, `--all`) |
 | `rmine time edit <id>` | Edit a time entry |
 | `rmine time delete <id>` | Delete a time entry (prompts unless `-y`/`--force`) |
