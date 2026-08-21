@@ -6,7 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/mehboobali98/rmine/internal/config"
 )
@@ -37,29 +41,78 @@ func setupTestProfile(t *testing.T, srv *httptest.Server) {
 	}
 }
 
-// runCLI executes rootCmd with args and returns whatever it wrote to stdout.
-func runCLI(t *testing.T, args ...string) string {
+// resetFlags restores every flag in the tree to its default and clears its
+// Changed marker. Flag values live in package-level vars that cobra only
+// writes when a flag is present, so without this a `-o json` in one test
+// silently stays in effect for every test that runs after it.
+func resetFlags(cmd *cobra.Command) {
+	clear := func(fs *pflag.FlagSet) {
+		fs.VisitAll(func(f *pflag.Flag) {
+			// Set() appends on slice flags rather than replacing, so
+			// repeated resets would accumulate the default instead of
+			// restoring it.
+			if sv, ok := f.Value.(pflag.SliceValue); ok {
+				_ = sv.Replace(nil)
+			} else {
+				_ = f.Value.Set(f.DefValue)
+			}
+			f.Changed = false
+		})
+	}
+	clear(cmd.Flags())
+	clear(cmd.PersistentFlags())
+	for _, sub := range cmd.Commands() {
+		resetFlags(sub)
+	}
+}
+
+// runCLIErr executes rootCmd with args and returns its stdout, its stderr,
+// and whatever error Execute reported.
+func runCLIErr(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 
-	r, w, err := os.Pipe()
+	resetFlags(rootCmd)
+	t.Cleanup(func() { resetFlags(rootCmd) })
+
+	outR, outW, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("os.Pipe: %v", err)
 	}
-	origStdout := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = origStdout }()
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+
+	// Drain both pipes concurrently. A pipe holds ~64KB before it blocks, so
+	// reading only after the command returns deadlocks the test on any
+	// command that produces more output than that.
+	outC, errC := make(chan []byte, 1), make(chan []byte, 1)
+	go func() { b, _ := io.ReadAll(outR); outC <- b }()
+	go func() { b, _ := io.ReadAll(errR); errC <- b }()
+
+	origStdout, origStderr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = outW, errW
 
 	rootCmd.SetArgs(args)
 	execErr := rootCmd.Execute()
 
-	w.Close()
-	out, _ := io.ReadAll(r)
-	os.Stdout = origStdout
+	os.Stdout, os.Stderr = origStdout, origStderr
+	outW.Close()
+	errW.Close()
 
-	if execErr != nil {
-		t.Fatalf("command %v failed: %v\noutput so far: %s", args, execErr, out)
+	return string(<-outC), string(<-errC), execErr
+}
+
+// runCLI executes rootCmd with args and returns whatever it wrote to stdout,
+// failing the test if the command errored.
+func runCLI(t *testing.T, args ...string) string {
+	t.Helper()
+
+	out, errOut, err := runCLIErr(t, args...)
+	if err != nil {
+		t.Fatalf("command %v failed: %v\nstdout: %s\nstderr: %s", args, err, out, errOut)
 	}
-	return string(out)
+	return out
 }
 
 func TestIssueListSmoke(t *testing.T) {
@@ -120,5 +173,31 @@ func TestTimeLogSmoke(t *testing.T) {
 	}
 	if entry["id"].(float64) != 99 {
 		t.Fatalf("unexpected entry: %+v", entry)
+	}
+}
+
+// TestRunCLIDoesNotLeakFlagsBetweenRuns guards the harness itself: before
+// resetFlags, a -o json in one run stayed set for every later run, so a test
+// asserting on table output would have been handed JSON and passed anyway.
+func TestRunCLIDoesNotLeakFlagsBetweenRuns(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"issues":      []map[string]any{{"id": 7, "subject": "leak probe"}},
+			"total_count": 1,
+		})
+	}))
+	defer srv.Close()
+
+	setupTestProfile(t, srv)
+
+	if out := runCLI(t, "issue", "list", "-o", "json"); !strings.HasPrefix(out, "[") {
+		t.Fatalf("first run: want JSON, got %q", out)
+	}
+	out := runCLI(t, "issue", "list")
+	if strings.HasPrefix(out, "[") {
+		t.Errorf("second run inherited -o json from the first: %q", out)
+	}
+	if !strings.Contains(out, "SUBJECT") {
+		t.Errorf("second run: want table output with headers, got %q", out)
 	}
 }

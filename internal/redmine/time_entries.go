@@ -6,21 +6,16 @@ import (
 	"strconv"
 )
 
-// timeEntryIssueRef is the trimmed-down issue reference embedded in a TimeEntry.
-type timeEntryIssueRef struct {
-	ID int `json:"id"`
-}
-
 // TimeEntry is a logged unit of time against an issue or project.
 type TimeEntry struct {
-	ID       int                `json:"id"`
-	Project  IDName             `json:"project"`
-	Issue    *timeEntryIssueRef `json:"issue"`
-	User     IDName             `json:"user"`
-	Activity IDName             `json:"activity"`
-	Hours    float64            `json:"hours"`
-	Comments string             `json:"comments"`
-	SpentOn  string             `json:"spent_on"`
+	ID       int       `json:"id"`
+	Project  IDName    `json:"project"`
+	Issue    *IssueRef `json:"issue"`
+	User     IDName    `json:"user"`
+	Activity IDName    `json:"activity"`
+	Hours    float64   `json:"hours"`
+	Comments string    `json:"comments"`
+	SpentOn  string    `json:"spent_on"`
 }
 
 // TimeEntryListFilter narrows a `rmine time list` query. Empty fields are omitted.
@@ -149,27 +144,30 @@ func (c *Client) CreateTimeEntry(req CreateTimeEntryRequest) (*TimeEntry, error)
 	return &resp.TimeEntry, nil
 }
 
-// UpdateTimeEntryRequest describes an edit to an existing time entry.
-// Zero-value fields are left unchanged on the server.
+// UpdateTimeEntryRequest describes an edit to an existing time entry. As with
+// UpdateIssueRequest, only non-nil fields are sent, so clearing a comment is
+// expressible where a value-typed struct could not tell an empty comment
+// apart from an untouched one.
 type UpdateTimeEntryRequest struct {
-	Hours      float64
-	ActivityID int
-	Comments   string
-	SpentOn    string
+	Hours      *float64
+	ActivityID *int
+	Comments   *string
+	SpentOn    *string
+}
+
+// fields renders the request as the sparse object Redmine expects.
+func (r UpdateTimeEntryRequest) fields() map[string]any {
+	m := map[string]any{}
+	setIf(m, "hours", r.Hours)
+	setIf(m, "activity_id", r.ActivityID)
+	setIf(m, "comments", r.Comments)
+	setIf(m, "spent_on", r.SpentOn)
+	return m
 }
 
 // UpdateTimeEntry applies a partial update to a time entry.
 func (c *Client) UpdateTimeEntry(id int, req UpdateTimeEntryRequest) error {
-	body := struct {
-		TimeEntry timeEntryFields `json:"time_entry"`
-	}{
-		TimeEntry: timeEntryFields{
-			Hours:      req.Hours,
-			ActivityID: req.ActivityID,
-			Comments:   req.Comments,
-			SpentOn:    req.SpentOn,
-		},
-	}
+	body := map[string]any{"time_entry": req.fields()}
 	return c.put(fmt.Sprintf("/time_entries/%d.json", id), body)
 }
 

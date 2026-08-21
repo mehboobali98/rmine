@@ -23,4 +23,6 @@ jobs:
             echo "$diff"
             exit 1
           fi
-      - run: go test ./...
+      # -race because the CLI redirects os.Stdout/os.Stderr in tests and
+      # drains the capture pipes from goroutines.
+      - run: go test -race ./...

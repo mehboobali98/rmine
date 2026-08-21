@@ -32,6 +32,10 @@ var timeLogCmd = &cobra.Command{
 		activityName, _ := cmd.Flags().GetString("activity")
 		comment, _ := cmd.Flags().GetString("comment")
 
+		if err := validateDates(dateFlag{"--date", date}); err != nil {
+			return err
+		}
+
 		client, err := newClient()
 		if err != nil {
 			return err
@@ -75,12 +79,24 @@ var timeListCmd = &cobra.Command{
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
 
+		if err := validateDates(dateFlag{"--from", from}, dateFlag{"--to", to}); err != nil {
+			return err
+		}
+
 		client, err := newClient()
 		if err != nil {
 			return err
 		}
 
 		project, err = resolveProjectFilter(client, project)
+		if err != nil {
+			return err
+		}
+		user, err = resolveUserFilter("--user", user)
+		if err != nil {
+			return err
+		}
+		issue, err = resolveIDFilter("--issue", issue)
 		if err != nil {
 			return err
 		}
@@ -137,33 +153,38 @@ var timeEditCmd = &cobra.Command{
 			return err
 		}
 
-		hours, _ := cmd.Flags().GetFloat64("hours")
 		date, _ := cmd.Flags().GetString("date")
 		activityName, _ := cmd.Flags().GetString("activity")
-		comment, _ := cmd.Flags().GetString("comment")
+
+		if err := validateDates(dateFlag{"--date", date}); err != nil {
+			return err
+		}
 
 		client, err := newClient()
 		if err != nil {
 			return err
 		}
 
+		// Only the flags actually passed are sent, so editing the hours on an
+		// entry no longer blanks nothing else by accident — and --comment ""
+		// now genuinely clears the comment.
 		req := redmine.UpdateTimeEntryRequest{
-			Hours:    hours,
-			Comments: comment,
-			SpentOn:  date,
+			Hours:    flagFloat64(cmd, "hours"),
+			Comments: flagString(cmd, "comment"),
+			SpentOn:  flagString(cmd, "date"),
 		}
 		if activityName != "" {
-			req.ActivityID, err = client.ResolveTimeEntryActivityID(activityName)
+			activityID, err := client.ResolveTimeEntryActivityID(activityName)
 			if err != nil {
 				return err
 			}
+			req.ActivityID = &activityID
 		}
 
 		if err := client.UpdateTimeEntry(id, req); err != nil {
 			return err
 		}
-		fmt.Printf("Updated time entry #%d\n", id)
-		return nil
+		return printAction(fmt.Sprintf("Updated time entry #%d", id), actionResult{Status: "updated", TimeEntry: id})
 	},
 }
 
@@ -179,8 +200,7 @@ var timeDeleteCmd = &cobra.Command{
 		force, _ := cmd.Flags().GetBool("force")
 
 		if !force && !confirm(fmt.Sprintf("Delete time entry #%d?", id), false) {
-			fmt.Println("Aborted.")
-			return nil
+			return printAction("Aborted.", actionResult{Status: "aborted", TimeEntry: id})
 		}
 
 		client, err := newClient()
@@ -190,8 +210,7 @@ var timeDeleteCmd = &cobra.Command{
 		if err := client.DeleteTimeEntry(id); err != nil {
 			return err
 		}
-		fmt.Printf("Deleted time entry #%d\n", id)
-		return nil
+		return printAction(fmt.Sprintf("Deleted time entry #%d", id), actionResult{Status: "deleted", TimeEntry: id})
 	},
 }
 
@@ -204,7 +223,7 @@ func init() {
 
 	timeListCmd.Flags().String("issue", "", "filter by issue ID")
 	timeListCmd.Flags().String("project", "", "filter by project ID, identifier, or name")
-	timeListCmd.Flags().String("user", "", "filter by user ID")
+	timeListCmd.Flags().String("user", "", "filter by user ID (or \"me\" for the authenticated user)")
 	timeListCmd.Flags().String("from", "", "only entries spent on or after this date (YYYY-MM-DD)")
 	timeListCmd.Flags().String("to", "", "only entries spent on or before this date (YYYY-MM-DD)")
 	timeListCmd.Flags().Int("limit", 25, "maximum number of entries to return")
@@ -213,7 +232,7 @@ func init() {
 	timeEditCmd.Flags().Float64("hours", 0, "new hours value")
 	timeEditCmd.Flags().String("date", "", "new date, YYYY-MM-DD")
 	timeEditCmd.Flags().String("activity", "", "new activity name")
-	timeEditCmd.Flags().String("comment", "", "new comment")
+	timeEditCmd.Flags().String("comment", "", "new comment (\"\" clears it)")
 
 	timeDeleteCmd.Flags().BoolP("force", "y", false, "skip the confirmation prompt")
 
@@ -228,7 +247,7 @@ func confirm(prompt string, defaultYes bool) bool {
 	if defaultYes {
 		hint = "[Y/n]"
 	}
-	fmt.Printf("%s %s ", prompt, hint)
+	promptf("%s %s ", prompt, hint)
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')
 	answer = strings.ToLower(strings.TrimSpace(answer))
