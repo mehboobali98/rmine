@@ -2,8 +2,11 @@
 package cli
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -21,13 +24,65 @@ var rootCmd = &cobra.Command{
 	Short:         "A command-line client for Redmine",
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// An unrecognized format used to fall through to the table branch,
+		// so `-o jsno` printed a table and exited 0 — the shape a caller was
+		// about to parse, silently not the one it asked for.
+		switch outputFlag {
+		case "table", "json":
+			return nil
+		}
+		return fmt.Errorf("--output must be table or json, got %q", outputFlag)
+	},
 }
+
+// invocationArgs is the command line Execute was handed. It exists for the
+// one decision that has to be made even when parsing never got far enough to
+// set a flag: whether the caller asked for JSON.
+var invocationArgs []string
 
 // Execute runs the CLI; it's the sole entrypoint called from main.
 func Execute() {
+	invocationArgs = os.Args[1:]
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		reportError(err)
 		os.Exit(1)
+	}
+}
+
+// errorPayload is what a failure looks like under -o json.
+//
+// Status and Errors are only set for a rejection that came from Redmine, so
+// a caller can tell a 422 it might fix by resending from a transport failure
+// it should not resend at all — which matters most on create, where a blind
+// retry is how you end up with two tickets.
+type errorPayload struct {
+	Message string   `json:"message"`
+	Status  int      `json:"status,omitempty"`
+	Errors  []string `json:"errors,omitempty"`
+}
+
+// reportError renders a command failure.
+//
+// The human sentence always goes to stderr. Under -o json a machine-readable
+// object also goes to stdout, because a caller that asked for JSON gets JSON
+// for every outcome or it gets none: stdout used to be *empty* on failure,
+// which is not a parse error a caller can act on — it is a parse error that
+// looks exactly like a crash.
+func reportError(err error) {
+	fmt.Fprintln(os.Stderr, "Error:", err)
+
+	if !wantsJSON() {
+		return
+	}
+	payload := errorPayload{Message: err.Error()}
+	var apiErr *redmine.APIError
+	if errors.As(err, &apiErr) {
+		payload.Status = apiErr.StatusCode
+		payload.Errors = apiErr.Errors
+	}
+	if data, mErr := json.MarshalIndent(map[string]errorPayload{"error": payload}, "", "  "); mErr == nil {
+		fmt.Println(string(data))
 	}
 }
 
@@ -102,6 +157,32 @@ func projectFilterOrDefault(flagValue string, allProjects, explicitScope bool) (
 }
 
 // wantsJSON reports whether -o/--output json was requested.
+//
+// It falls back to the raw arguments because outputFlag is only set once
+// cobra has parsed the command line, and the failures most in need of a
+// parseable answer happen before that — an unknown flag, an unknown
+// subcommand. pflag stops at the first thing it doesn't recognize, so
+// `rmine issue list --bogus -o json` never applies the -o. Without this,
+// exactly those errors would come back as the empty stdout the JSON error
+// payload exists to eliminate.
 func wantsJSON() bool {
-	return outputFlag == "json"
+	if outputFlag == "json" {
+		return true
+	}
+	return jsonInArgs(invocationArgs)
+}
+
+func jsonInArgs(args []string) bool {
+	for i, arg := range args {
+		switch {
+		case arg == "--output=json", arg == "-o=json":
+			return true
+		case arg == "-o", arg == "--output":
+			return i+1 < len(args) && args[i+1] == "json"
+		case strings.HasPrefix(arg, "-o") && len(arg) > 2 && !strings.HasPrefix(arg, "--"):
+			// The attached short form, `-ojson`.
+			return arg[2:] == "json"
+		}
+	}
+	return false
 }

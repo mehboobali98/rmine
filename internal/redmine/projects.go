@@ -8,13 +8,32 @@ import (
 )
 
 // Project is a Redmine project.
+//
+// The fields below the fold are only populated by GetProject, and only when
+// asked for: Redmine returns them under `include`, and a listing never
+// carries them. They are what an agent needs to construct a valid `issue
+// create` — which trackers this project accepts, which categories and
+// versions exist — and their absence used to make that undiscoverable
+// without sampling existing issues.
 type Project struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Identifier  string `json:"identifier"`
-	Description string `json:"description"`
-	Status      int    `json:"status"`
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	Identifier  string  `json:"identifier"`
+	Description string  `json:"description"`
+	Homepage    string  `json:"homepage,omitempty"`
+	Status      int     `json:"status"`
+	IsPublic    *bool   `json:"is_public,omitempty"`
+	Parent      *IDName `json:"parent,omitempty"`
+
+	Trackers        []IDName `json:"trackers,omitempty"`
+	IssueCategories []IDName `json:"issue_categories,omitempty"`
+	EnabledModules  []IDName `json:"enabled_modules,omitempty"`
 }
+
+// projectDetailIncludes is what GetProjectDetail asks Redmine to embed. An
+// unknown include is ignored rather than rejected, so a server with the
+// issue-tracking module disabled simply returns fewer keys.
+var projectDetailIncludes = []string{"trackers", "issue_categories", "enabled_modules"}
 
 type projectListResponse struct {
 	Projects   []Project `json:"projects"`
@@ -52,8 +71,22 @@ func (c *Client) ListProjects() ([]Project, error) {
 
 // GetProject fetches a single project by numeric ID or string identifier.
 func (c *Client) GetProject(idOrIdentifier string) (*Project, error) {
+	return c.getProject(idOrIdentifier, nil)
+}
+
+// GetProjectDetail fetches a project along with the trackers, categories and
+// modules it has enabled.
+func (c *Client) GetProjectDetail(idOrIdentifier string) (*Project, error) {
+	return c.getProject(idOrIdentifier, projectDetailIncludes)
+}
+
+func (c *Client) getProject(idOrIdentifier string, includes []string) (*Project, error) {
+	var query url.Values
+	if len(includes) > 0 {
+		query = url.Values{"include": {strings.Join(includes, ",")}}
+	}
 	var resp projectResponse
-	if err := c.get("/projects/"+url.PathEscape(idOrIdentifier)+".json", nil, &resp); err != nil {
+	if err := c.get("/projects/"+url.PathEscape(idOrIdentifier)+".json", query, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Project, nil
@@ -78,12 +111,14 @@ func (c *Client) ResolveProjectID(name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	candidates := make([]IDName, 0, len(projects))
 	for _, p := range projects {
 		if strings.EqualFold(p.Name, name) || strings.EqualFold(p.Identifier, name) {
 			return p.ID, nil
 		}
+		candidates = append(candidates, IDName{ID: p.ID, Name: p.Name})
 	}
-	return 0, fmt.Errorf("project: %w for %q", ErrNoMatch, name)
+	return 0, fmt.Errorf("project: %w", noMatch(name, candidates))
 }
 
 // looksLikeIdentifier reports whether s has the shape of a Redmine project
