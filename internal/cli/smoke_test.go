@@ -93,8 +93,17 @@ func runCLIErr(t *testing.T, args ...string) (stdout, stderr string, err error) 
 	origStdout, origStderr := os.Stdout, os.Stderr
 	os.Stdout, os.Stderr = outW, errW
 
+	// Mirror Execute(): the same args, and the same error rendering, so that
+	// what a test sees on stdout and stderr is what a caller would see. The
+	// JSON error payload in particular only exists on this path.
+	prevArgs := invocationArgs
+	invocationArgs = args
 	rootCmd.SetArgs(args)
 	execErr := rootCmd.Execute()
+	if execErr != nil {
+		reportError(execErr)
+	}
+	invocationArgs = prevArgs
 
 	os.Stdout, os.Stderr = origStdout, origStderr
 	outW.Close()

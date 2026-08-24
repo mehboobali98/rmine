@@ -66,8 +66,16 @@ type actionResult struct {
 	Status    string `json:"status"`
 	Issue     int    `json:"issue,omitempty"`
 	TimeEntry int    `json:"time_entry,omitempty"`
+	Relation  int    `json:"relation,omitempty"`
 	Profile   string `json:"profile,omitempty"`
 	Path      string `json:"path,omitempty"`
+
+	// DroppedFields names custom fields the server accepted and did not
+	// store. A write that reports "updated" while quietly discarding half of
+	// what it was given is still a successful write, but not the one the
+	// caller asked for — and this is the only place a -o json caller can see
+	// the difference.
+	DroppedFields []int `json:"dropped_fields,omitempty"`
 }
 
 // printAction reports a mutating command's outcome: a human sentence by

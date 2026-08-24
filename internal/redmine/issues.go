@@ -36,9 +36,21 @@ type Issue struct {
 	SpentHours     *float64      `json:"spent_hours,omitempty"`
 	CustomFields   []CustomField `json:"custom_fields,omitempty"`
 	Attachments    []Attachment  `json:"attachments,omitempty"`
+	Children       []IssueChild  `json:"children,omitempty"`
+	Relations      []Relation    `json:"relations,omitempty"`
 	Journals       []Journal     `json:"journals,omitempty"`
 	CreatedOn      time.Time     `json:"created_on"`
 	UpdatedOn      time.Time     `json:"updated_on"`
+}
+
+// IssueChild is a subtask as Redmine embeds it under an issue's children.
+// It carries only enough to identify the child; fetch it by ID for the rest.
+// Children nest, so a whole subtask tree arrives in one response.
+type IssueChild struct {
+	ID       int          `json:"id"`
+	Tracker  IDName       `json:"tracker"`
+	Subject  string       `json:"subject"`
+	Children []IssueChild `json:"children,omitempty"`
 }
 
 // IssueRef is a bare reference to another issue — what Redmine embeds for an
@@ -146,6 +158,7 @@ type IssueListFilter struct {
 	UpdatedBefore string // YYYY-MM-DD
 	DueAfter      string // YYYY-MM-DD
 	DueBefore     string // YYYY-MM-DD
+	VersionID     string // fixed_version_id; "*" for any, "!*" for none
 	Sort          string // Redmine sort spec, e.g. "due_date:asc,priority:desc"
 	Limit         int    // 0 means "use Redmine's default page size"
 	All           bool   // ignore Limit and fetch every matching issue
@@ -181,6 +194,14 @@ func buildAdvancedIssueFilter(f IssueListFilter) url.Values {
 	}
 	if f.AssignedTo != "" {
 		addField("assigned_to_id", "=", f.AssignedTo)
+	}
+	if f.VersionID != "" {
+		switch f.VersionID {
+		case "*", "!*":
+			addField("fixed_version_id", f.VersionID)
+		default:
+			addField("fixed_version_id", "=", f.VersionID)
+		}
 	}
 	if f.StatusID != "" {
 		switch f.StatusID {
@@ -244,6 +265,9 @@ func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 		if f.TrackerID != "" {
 			base.Set("tracker_id", f.TrackerID)
 		}
+		if f.VersionID != "" {
+			base.Set("fixed_version_id", f.VersionID)
+		}
 		if f.UpdatedAfter != "" || f.UpdatedBefore != "" {
 			base.Set("updated_on", dateRangeFilter(f.UpdatedAfter, f.UpdatedBefore))
 		}
@@ -296,16 +320,43 @@ func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 	return all, nil
 }
 
-// GetIssue fetches a single issue by ID. Attachments always come along — they
-// are a handful of small keys. Comments (Redmine calls them journals) only
-// when asked: a long-running issue's history is far bigger than the issue
-// itself, and most callers don't want it.
-func (c *Client) GetIssue(id int, withComments bool) (*Issue, error) {
-	includes := "attachments"
-	if withComments {
-		includes += ",journals"
+// GetIssueOptions selects what Redmine embeds alongside the issue.
+//
+// Every one of these is an `include` the API will not send unless asked, and
+// a field that is never asked for is indistinguishable from one that is
+// empty — an issue's subtasks read as "no subtasks" rather than as "not
+// fetched". Attachments are not listed here because they always come along:
+// they are a handful of small keys and the one thing every caller wanted.
+type GetIssueOptions struct {
+	// Comments fetches the issue's journals. Off by default because a
+	// long-running issue's history is far bigger than the issue itself.
+	Comments bool
+	// Children fetches the subtask tree.
+	Children bool
+	// Relations fetches typed links to other issues.
+	Relations bool
+}
+
+// FullIssue asks for everything except comments — the detail view's default.
+// Children and relations are bounded and small, unlike a journal list, so
+// there is nothing to gain by making a caller opt into them one at a time.
+func FullIssue() GetIssueOptions {
+	return GetIssueOptions{Children: true, Relations: true}
+}
+
+// GetIssue fetches a single issue by ID.
+func (c *Client) GetIssue(id int, opts GetIssueOptions) (*Issue, error) {
+	includes := []string{"attachments"}
+	if opts.Comments {
+		includes = append(includes, "journals")
 	}
-	query := url.Values{"include": {includes}}
+	if opts.Children {
+		includes = append(includes, "children")
+	}
+	if opts.Relations {
+		includes = append(includes, "relations")
+	}
+	query := url.Values{"include": {strings.Join(includes, ",")}}
 
 	var resp issueResponse
 	if err := c.get(fmt.Sprintf("/issues/%d.json", id), query, &resp); err != nil {
@@ -325,11 +376,13 @@ type CreateIssueRequest struct {
 	AssignedTo     int
 	CategoryID     int
 	ParentID       int
+	FixedVersionID int
 	StartDate      string
 	DueDate        string
 	EstimatedHours float64
 	DoneRatio      int
 	CustomFields   []CustomField
+	Uploads        []Upload
 }
 
 // issueFields is the payload for the two writes that always send a fixed set
@@ -344,12 +397,14 @@ type issueFields struct {
 	AssignedTo     int           `json:"assigned_to_id,omitempty"`
 	CategoryID     int           `json:"category_id,omitempty"`
 	ParentID       int           `json:"parent_issue_id,omitempty"`
+	FixedVersionID int           `json:"fixed_version_id,omitempty"`
 	StartDate      string        `json:"start_date,omitempty"`
 	DueDate        string        `json:"due_date,omitempty"`
 	EstimatedHours float64       `json:"estimated_hours,omitempty"`
 	DoneRatio      int           `json:"done_ratio,omitempty"`
 	Notes          string        `json:"notes,omitempty"`
 	CustomFields   []CustomField `json:"custom_fields,omitempty"`
+	Uploads        []Upload      `json:"uploads,omitempty"`
 }
 
 // CreateIssue creates a new issue and returns it as stored by Redmine.
@@ -366,11 +421,13 @@ func (c *Client) CreateIssue(req CreateIssueRequest) (*Issue, error) {
 			AssignedTo:     req.AssignedTo,
 			CategoryID:     req.CategoryID,
 			ParentID:       req.ParentID,
+			FixedVersionID: req.FixedVersionID,
 			StartDate:      req.StartDate,
 			DueDate:        req.DueDate,
 			EstimatedHours: req.EstimatedHours,
 			DoneRatio:      req.DoneRatio,
 			CustomFields:   req.CustomFields,
+			Uploads:        req.Uploads,
 		},
 	}
 
@@ -398,11 +455,20 @@ type UpdateIssueRequest struct {
 	AssignedTo     *int // 0 clears the assignee
 	CategoryID     *int // 0 clears the category
 	ParentID       *int // 0 detaches from the parent issue
+	FixedVersionID *int // 0 clears the target version
 	StartDate      *string
 	DueDate        *string
 	EstimatedHours *float64 // 0 clears the estimate
 	DoneRatio      *int     // 0 is a real value, not a clear
 	CustomFields   []CustomField
+
+	// Notes records a journal comment against this edit. Redmine files it on
+	// the same journal entry as the field changes, so the note explains the
+	// change instead of trailing it as a separate remark.
+	Notes *string
+
+	// Uploads attaches files staged by Client.UploadFile.
+	Uploads []Upload
 }
 
 // fields renders the request as the sparse object Redmine expects.
@@ -428,8 +494,15 @@ func (r UpdateIssueRequest) fields() map[string]any {
 	if r.EstimatedHours != nil {
 		m["estimated_hours"] = clearable(*r.EstimatedHours)
 	}
+	if r.FixedVersionID != nil {
+		m["fixed_version_id"] = clearable(*r.FixedVersionID)
+	}
+	setIf(m, "notes", r.Notes)
 	if len(r.CustomFields) > 0 {
 		m["custom_fields"] = r.CustomFields
+	}
+	if len(r.Uploads) > 0 {
+		m["uploads"] = r.Uploads
 	}
 	return m
 }
@@ -457,10 +530,47 @@ func (c *Client) UpdateIssue(id int, req UpdateIssueRequest) error {
 	return c.put(fmt.Sprintf("/issues/%d.json", id), body)
 }
 
-// AddNote appends a comment to an issue via Redmine's notes field.
-func (c *Client) AddNote(id int, note string) error {
+// AddNote appends a comment to an issue, optionally carrying files staged by
+// Client.UploadFile. Redmine files the attachments on the same journal entry
+// as the note.
+func (c *Client) AddNote(id int, note string, uploads []Upload) error {
 	body := struct {
 		Issue issueFields `json:"issue"`
-	}{Issue: issueFields{Notes: note}}
+	}{Issue: issueFields{Notes: note, Uploads: uploads}}
 	return c.put(fmt.Sprintf("/issues/%d.json", id), body)
+}
+
+// MissingCustomFields reports which of the custom fields a write asked for
+// are absent from the issue Redmine stored.
+//
+// Redmine exposes only a subset of an instance's custom fields on any given
+// tracker, and a write naming a field outside that subset is not rejected —
+// it is accepted, answered with 200, and dropped. Nothing in the response
+// distinguishes that from a field that was stored, except that the field is
+// missing from custom_fields entirely: Redmine lists every field the tracker
+// *does* expose, set or not, so absence is a reliable signal rather than a
+// guess about empty values.
+//
+// The IDs come back in the order they were requested, so a message built from
+// them names the fields in the order the caller typed them.
+func MissingCustomFields(requested, stored []CustomField) []int {
+	if len(requested) == 0 {
+		return nil
+	}
+
+	present := make(map[int]bool, len(stored))
+	for _, f := range stored {
+		present[f.ID] = true
+	}
+
+	var missing []int
+	seen := make(map[int]bool, len(requested))
+	for _, f := range requested {
+		if present[f.ID] || seen[f.ID] {
+			continue
+		}
+		seen[f.ID] = true
+		missing = append(missing, f.ID)
+	}
+	return missing
 }

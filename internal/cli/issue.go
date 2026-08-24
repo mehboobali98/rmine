@@ -36,6 +36,7 @@ var issueListCmd = &cobra.Command{
 		dueNextWeek, _ := cmd.Flags().GetBool("due-next-week")
 		overdue, _ := cmd.Flags().GetBool("overdue")
 		allProjects, _ := cmd.Flags().GetBool("all-projects")
+		version, _ := cmd.Flags().GetString("version")
 		sort, _ := cmd.Flags().GetString("sort")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
@@ -76,6 +77,10 @@ var issueListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		version, err = resolveVersionFilter(client, version, project)
+		if err != nil {
+			return err
+		}
 		// projectArg, not the resolved id: Redmine accepts either in the
 		// memberships path, and an error should name the project the user
 		// typed rather than a number they never saw.
@@ -98,6 +103,7 @@ var issueListCmd = &cobra.Command{
 			UpdatedBefore: updatedBefore,
 			DueAfter:      dueAfter,
 			DueBefore:     dueBefore,
+			VersionID:     version,
 			Sort:          sort,
 			Limit:         limit,
 			All:           all,
@@ -152,7 +158,9 @@ var issueViewCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		issue, err := client.GetIssue(id, comments)
+		opts := redmine.FullIssue()
+		opts.Comments = comments
+		issue, err := client.GetIssue(id, opts)
 		if err != nil {
 			return err
 		}
@@ -204,6 +212,16 @@ var issueViewCmd = &cobra.Command{
 				fmt.Printf("  [%d] %s (%s, %d bytes)\n", a.ID, a.Filename, a.ContentType, a.Filesize)
 			}
 		}
+		if len(issue.Children) > 0 {
+			fmt.Printf("\nSubtasks:\n")
+			printChildren(issue.Children, "  ")
+		}
+		if len(issue.Relations) > 0 {
+			fmt.Printf("\nRelations:\n")
+			for _, r := range issue.Relations {
+				fmt.Printf("  [%d] %s\n", r.ID, describeRelation(issue.ID, r))
+			}
+		}
 		for _, j := range issue.Journals {
 			if j.Notes == "" {
 				continue // a bare field change, not a comment
@@ -228,7 +246,7 @@ var issueAttachmentsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		issue, err := client.GetIssue(id, false)
+		issue, err := client.GetIssue(id, redmine.GetIssueOptions{})
 		if err != nil {
 			return err
 		}
@@ -318,6 +336,8 @@ var issueCreateCmd = &cobra.Command{
 		dueDate, _ := cmd.Flags().GetString("due-date")
 		estimated, _ := cmd.Flags().GetFloat64("estimated-hours")
 		doneRatio, _ := cmd.Flags().GetInt("done-ratio")
+		versionName, _ := cmd.Flags().GetString("version")
+		attachPaths, _ := cmd.Flags().GetStringArray("attach")
 		fieldArgs, _ := cmd.Flags().GetStringArray("field")
 
 		if err := validateDates(dateFlag{"--start-date", startDate}, dateFlag{"--due-date", dueDate}); err != nil {
@@ -363,6 +383,12 @@ var issueCreateCmd = &cobra.Command{
 			DoneRatio:      doneRatio,
 			CustomFields:   customFields,
 		}
+		if versionName != "" {
+			req.FixedVersionID, err = resolveVersion(client, project, versionName)
+			if err != nil {
+				return err
+			}
+		}
 		if trackerName != "" {
 			req.TrackerID, err = client.ResolveTrackerID(trackerName)
 			if err != nil {
@@ -382,15 +408,32 @@ var issueCreateCmd = &cobra.Command{
 			}
 		}
 
+		// Files are staged last, so that a create rejected for a bad tracker
+		// or an unknown version fails before anything is uploaded.
+		req.Uploads, err = stageAttachments(client, attachPaths)
+		if err != nil {
+			return err
+		}
+
 		issue, err := client.CreateIssue(req)
 		if err != nil {
 			return err
 		}
 
+		// Redmine answers a create naming a custom field the tracker does not
+		// expose with a 200 and no mention of the field, so the response is
+		// the only place the omission shows up.
+		dropped := redmine.MissingCustomFields(customFields, issue.CustomFields)
+		warnDroppedFields(dropped, issue.Tracker.Name)
+
 		if wantsJSON() {
-			return printJSON(issue)
+			return printJSON(createdIssue{
+				issueWithURL:  withIssueURL(client, issue),
+				DroppedFields: dropped,
+			})
 		}
 		fmt.Printf("Created issue #%d: %s\n", issue.ID, issue.Subject)
+		fmt.Printf("URL: %s\n", issueURL(client, issue.ID))
 		return nil
 	},
 }
@@ -412,6 +455,7 @@ var issueUpdateCmd = &cobra.Command{
 		startDate, _ := cmd.Flags().GetString("start-date")
 		dueDate, _ := cmd.Flags().GetString("due-date")
 		doneRatio, _ := cmd.Flags().GetInt("done-ratio")
+		attachPaths, _ := cmd.Flags().GetStringArray("attach")
 		fieldArgs, _ := cmd.Flags().GetStringArray("field")
 
 		if err := validateDates(dateFlag{"--start-date", startDate}, dateFlag{"--due-date", dueDate}); err != nil {
@@ -436,7 +480,7 @@ var issueUpdateCmd = &cobra.Command{
 		var fetched *redmine.Issue
 		issueProject := func() (string, error) {
 			if fetched == nil {
-				got, err := client.GetIssue(id, false)
+				got, err := client.GetIssue(id, redmine.GetIssueOptions{})
 				if err != nil {
 					return "", err
 				}
@@ -456,6 +500,7 @@ var issueUpdateCmd = &cobra.Command{
 			EstimatedHours: flagFloat64(cmd, "estimated-hours"),
 			DoneRatio:      flagInt(cmd, "done-ratio"),
 			CustomFields:   customFields,
+			Notes:          flagString(cmd, "notes"),
 		}
 		if trackerName != "" {
 			id, err := client.ResolveTrackerID(trackerName)
@@ -492,6 +537,20 @@ var issueUpdateCmd = &cobra.Command{
 			}
 			req.CategoryID = &categoryID
 		}
+		if cmd.Flags().Changed("version") {
+			versionName, _ := cmd.Flags().GetString("version")
+			versionID := 0 // --version "" clears the target version
+			if versionName != "" {
+				project, err := issueProject()
+				if err != nil {
+					return err
+				}
+				if versionID, err = resolveVersion(client, project, versionName); err != nil {
+					return err
+				}
+			}
+			req.FixedVersionID = &versionID
+		}
 		if cmd.Flags().Changed("assignee") {
 			assignee, _ := cmd.Flags().GetString("assignee")
 
@@ -510,10 +569,32 @@ var issueUpdateCmd = &cobra.Command{
 			req.AssignedTo = &assigneeID
 		}
 
+		req.Uploads, err = stageAttachments(client, attachPaths)
+		if err != nil {
+			return err
+		}
+
 		if err := client.UpdateIssue(id, req); err != nil {
 			return err
 		}
-		return printAction(fmt.Sprintf("Updated issue #%d", id), actionResult{Status: "updated", Issue: id})
+
+		// A PUT answers 204 with no body, so unlike create there is nothing to
+		// compare against — the issue has to be read back. Only worth a round
+		// trip when custom fields were actually part of the edit.
+		var dropped []int
+		if len(customFields) > 0 {
+			stored, err := client.GetIssue(id, redmine.GetIssueOptions{})
+			if err != nil {
+				return fmt.Errorf("issue #%d was updated, but verifying its custom fields failed: %w", id, err)
+			}
+			dropped = redmine.MissingCustomFields(customFields, stored.CustomFields)
+			warnDroppedFields(dropped, stored.Tracker.Name)
+		}
+
+		return printAction(
+			fmt.Sprintf("Updated issue #%d", id),
+			actionResult{Status: "updated", Issue: id, DroppedFields: dropped},
+		)
 	},
 }
 
@@ -559,14 +640,132 @@ var issueCommentCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		attachPaths, _ := cmd.Flags().GetStringArray("attach")
 		client, err := newClient()
 		if err != nil {
 			return err
 		}
-		if err := client.AddNote(id, args[1]); err != nil {
+		uploads, err := stageAttachments(client, attachPaths)
+		if err != nil {
+			return err
+		}
+		if err := client.AddNote(id, args[1], uploads); err != nil {
 			return err
 		}
 		return printAction(fmt.Sprintf("Commented on issue #%d", id), actionResult{Status: "commented", Issue: id})
+	},
+}
+
+var issueRelationsCmd = &cobra.Command{
+	Use:   "relations <id>",
+	Short: "List an issue's links to other issues",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseIssueID(args[0])
+		if err != nil {
+			return err
+		}
+		client, err := newClient()
+		if err != nil {
+			return err
+		}
+		relations, err := client.ListIssueRelations(id)
+		if err != nil {
+			return err
+		}
+
+		if wantsJSON() {
+			return printJSON(relations)
+		}
+		if len(relations) == 0 {
+			fmt.Printf("Issue #%d has no relations\n", id)
+			return nil
+		}
+		rows := make([][]string, 0, len(relations))
+		for _, r := range relations {
+			rows = append(rows, []string{
+				strconv.Itoa(r.ID),
+				describeRelation(id, r),
+				delayColumn(r),
+			})
+		}
+		printTable([]string{"ID", "RELATION", "DELAY"}, rows)
+		return nil
+	},
+}
+
+var issueRelateCmd = &cobra.Command{
+	Use:   "relate <id> <type> <other-id>",
+	Short: "Link two issues, e.g. `rmine issue relate 100 precedes 200`",
+	Long: "Link two issues. The type reads left to right: `relate 100 precedes 200`\n" +
+		"records that #100 precedes #200.\n\nTypes: " + strings.Join(redmine.RelationTypes(), ", "),
+	Args: cobra.ExactArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := parseIssueID(args[0])
+		if err != nil {
+			return err
+		}
+		relationType := strings.ToLower(strings.TrimSpace(args[1]))
+		if err := redmine.ValidateRelationType(relationType); err != nil {
+			return err
+		}
+		otherID, err := parseIssueID(args[2])
+		if err != nil {
+			return err
+		}
+		if id == otherID {
+			return fmt.Errorf("cannot relate issue #%d to itself", id)
+		}
+
+		rel := redmine.NewRelation{IssueToID: otherID, RelationType: relationType}
+		if cmd.Flags().Changed("delay") {
+			if !redmine.SupportsDelay(relationType) {
+				return fmt.Errorf("--delay only applies to precedes/follows, not %q", relationType)
+			}
+			delay, _ := cmd.Flags().GetInt("delay")
+			rel.Delay = &delay
+		}
+
+		client, err := newClient()
+		if err != nil {
+			return err
+		}
+		created, err := client.CreateIssueRelation(id, rel)
+		if err != nil {
+			return err
+		}
+		return printAction(
+			fmt.Sprintf("Linked issue #%d %s #%d (relation %d)", id, relationType, otherID, created.ID),
+			actionResult{Status: "related", Issue: id, Relation: created.ID},
+		)
+	},
+}
+
+var issueUnrelateCmd = &cobra.Command{
+	Use:   "unrelate <relation-id>",
+	Short: "Remove a link between two issues",
+	Long: "Remove a link between two issues. Takes the relation's own ID, not\n" +
+		"either issue's — `rmine issue relations <id>` lists them in its ID column.",
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.Atoi(args[0])
+		if err != nil {
+			return fmt.Errorf("invalid relation ID %q", args[0])
+		}
+		force, _ := cmd.Flags().GetBool("force")
+
+		if !force && !confirm(fmt.Sprintf("Delete relation #%d?", id), false) {
+			return printAction("Aborted.", actionResult{Status: "aborted", Relation: id})
+		}
+
+		client, err := newClient()
+		if err != nil {
+			return err
+		}
+		if err := client.DeleteIssueRelation(id); err != nil {
+			return err
+		}
+		return printAction(fmt.Sprintf("Deleted relation #%d", id), actionResult{Status: "deleted", Relation: id})
 	},
 }
 
@@ -584,6 +783,7 @@ func init() {
 	issueListCmd.Flags().Int("due-within", 0, "only issues due within this many days from today")
 	issueListCmd.Flags().Bool("due-next-week", false, "only issues due next week (Mon-Sun)")
 	issueListCmd.Flags().Bool("overdue", false, "only issues whose due date has already passed")
+	issueListCmd.Flags().String("version", "", "filter by target version name or ID (\"*\" for any, \"!*\" for none); a name needs --project")
 	issueListCmd.Flags().String("sort", "", "sort order, e.g. due_date or \"priority:desc,due_date:asc\"")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
@@ -600,6 +800,8 @@ func init() {
 	issueCreateCmd.Flags().String("due-date", "", "due date (YYYY-MM-DD)")
 	issueCreateCmd.Flags().Float64("estimated-hours", 0, "estimated hours")
 	issueCreateCmd.Flags().Int("done-ratio", 0, "percent complete (0-100)")
+	issueCreateCmd.Flags().String("version", "", "target version name or ID (see `rmine project versions <project>`)")
+	issueCreateCmd.Flags().StringArray("attach", nil, "attach a local file (repeatable)")
 	issueCreateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable); find IDs via `rmine issue view <id> -o json` on an existing issue")
 	_ = issueCreateCmd.MarkFlagRequired("subject")
 
@@ -615,6 +817,9 @@ func init() {
 	issueUpdateCmd.Flags().String("due-date", "", "new due date (YYYY-MM-DD)")
 	issueUpdateCmd.Flags().Float64("estimated-hours", 0, "new estimated hours (0 clears the estimate)")
 	issueUpdateCmd.Flags().Int("done-ratio", 0, "new percent complete (0-100)")
+	issueUpdateCmd.Flags().String("version", "", "new target version name or ID, or \"\" to clear (see `rmine project versions <project>`)")
+	issueUpdateCmd.Flags().String("notes", "", "journal comment recorded alongside this change")
+	issueUpdateCmd.Flags().StringArray("attach", nil, "attach a local file (repeatable)")
 	issueUpdateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable)")
 
 	issueCloseCmd.Flags().String("status", "", "status name to close with (defaults to the server's first closed status)")
@@ -623,7 +828,16 @@ func init() {
 
 	issueAttachmentsCmd.Flags().String("download", "", "download every attachment into this directory")
 
-	issueCmd.AddCommand(issueListCmd, issueViewCmd, issueAttachmentsCmd, issueCreateCmd, issueUpdateCmd, issueCloseCmd, issueCommentCmd)
+	issueCommentCmd.Flags().StringArray("attach", nil, "attach a local file (repeatable)")
+
+	issueRelateCmd.Flags().Int("delay", 0, "days between the two issues (precedes/follows only)")
+	issueUnrelateCmd.Flags().BoolP("force", "y", false, "skip the confirmation prompt")
+
+	issueCmd.AddCommand(
+		issueListCmd, issueViewCmd, issueAttachmentsCmd, issueCreateCmd,
+		issueUpdateCmd, issueCloseCmd, issueCommentCmd,
+		issueRelationsCmd, issueRelateCmd, issueUnrelateCmd,
+	)
 	rootCmd.AddCommand(issueCmd)
 }
 
@@ -973,4 +1187,128 @@ func resolveDueDateRange(now time.Time, after, before string, within int, nextWe
 	default:
 		return after, before, nil
 	}
+}
+
+// createdIssue is what `issue create -o json` emits: the stored issue, plus
+// the custom fields Redmine declined to store. The flat shape means a caller
+// that already reads .id keeps working, and DroppedFields disappears from the
+// output entirely when everything was written.
+type createdIssue struct {
+	issueWithURL
+	DroppedFields []int `json:"dropped_fields,omitempty"`
+}
+
+// warnDroppedFields reports custom fields that a write asked for and the
+// server did not keep.
+//
+// This is a warning rather than a failure on purpose. The write itself
+// succeeded — the issue exists, or the other fields in the edit landed — and
+// exiting non-zero would invite the one recovery that is genuinely unsafe
+// here: resending a create, which produces a second ticket. So the exit
+// status still reports what happened, and the omission is surfaced in both
+// output modes: on stderr for a person, under "dropped_fields" for a caller
+// parsing -o json.
+func warnDroppedFields(dropped []int, tracker string) {
+	if len(dropped) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(dropped))
+	for _, id := range dropped {
+		ids = append(ids, strconv.Itoa(id))
+	}
+	where := "this issue's tracker"
+	if tracker != "" {
+		where = "the " + tracker + " tracker"
+	}
+	promptf("Warning: custom field %s was not stored — %s does not expose it. Everything else was saved.\n",
+		strings.Join(ids, ", "), where)
+}
+
+// stageAttachments uploads each --attach file and returns the tokens to
+// reference from the issue payload.
+//
+// Uploading is a separate request per file, and a token is only bound to an
+// issue by the create/update that follows — so a failure part-way through
+// leaves nothing on the issue, just expired staging. That is why the error
+// names the file: the caller has to know which one to retry.
+func stageAttachments(client *redmine.Client, paths []string) ([]redmine.Upload, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	uploads := make([]redmine.Upload, 0, len(paths))
+	for _, path := range paths {
+		upload, err := client.UploadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		uploads = append(uploads, *upload)
+	}
+	return uploads, nil
+}
+
+// printChildren renders a subtask tree, indenting each generation.
+func printChildren(children []redmine.IssueChild, indent string) {
+	for _, c := range children {
+		fmt.Printf("%s#%d [%s] %s\n", indent, c.ID, c.Tracker.Name, flattenCell(c.Subject))
+		printChildren(c.Children, indent+"  ")
+	}
+}
+
+// describeRelation renders a relation from the point of view of the issue
+// being looked at. Redmine stores each link once and returns it to both
+// issues unchanged, so an issue that *follows* another receives a row saying
+// "precedes" with itself in issue_to_id — printing that verbatim states the
+// dependency backwards.
+func describeRelation(viewedFrom int, r redmine.Relation) string {
+	relationType, other := r.RelationType, r.IssueToID
+	if r.IssueToID == viewedFrom {
+		relationType, other = redmine.InvertRelationType(r.RelationType), r.IssueID
+	}
+	return fmt.Sprintf("%s #%d", relationType, other)
+}
+
+// delayColumn renders a relation's delay, which only the scheduling types
+// carry.
+func delayColumn(r redmine.Relation) string {
+	if r.Delay == nil {
+		return "-"
+	}
+	return strconv.Itoa(*r.Delay) + "d"
+}
+
+// resolveVersion resolves a --version value for a write, which needs a real
+// numeric ID. Versions belong to a project, so unlike a tracker or a status a
+// name can only be looked up once the project is known.
+func resolveVersion(client *redmine.Client, project, value string) (int, error) {
+	if id, err := strconv.Atoi(value); err == nil {
+		return id, nil
+	}
+	if project == "" {
+		return 0, fmt.Errorf("--version cannot resolve the name %q without a project — pass a numeric version ID", value)
+	}
+	id, err := client.ResolveVersionID(project, value)
+	if err != nil {
+		return 0, fmt.Errorf("--version: %w", err)
+	}
+	return id, nil
+}
+
+// resolveVersionFilter does the same for `issue list`, where Redmine's "any"
+// and "none" operators are also valid values.
+func resolveVersionFilter(client *redmine.Client, value, project string) (string, error) {
+	switch value {
+	case "", "*", "!*":
+		return value, nil
+	}
+	if _, err := strconv.Atoi(value); err == nil {
+		return value, nil
+	}
+	if project == "" {
+		return "", fmt.Errorf("--version cannot resolve the name %q without a project — add --project, or pass a numeric version ID", value)
+	}
+	id, err := client.ResolveVersionID(project, value)
+	if err != nil {
+		return "", fmt.Errorf("--version: %w", err)
+	}
+	return strconv.Itoa(id), nil
 }
