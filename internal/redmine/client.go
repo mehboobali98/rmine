@@ -69,11 +69,6 @@ type errorBody struct {
 }
 
 func (c *Client) do(method, path string, query url.Values, body, out any) error {
-	u := c.baseURL + path
-	if len(query) > 0 {
-		u += "?" + query.Encode()
-	}
-
 	var reqBody io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -82,13 +77,25 @@ func (c *Client) do(method, path string, query url.Values, body, out any) error 
 		}
 		reqBody = bytes.NewReader(data)
 	}
+	return c.doRaw(method, path, query, "application/json", reqBody, out)
+}
+
+// doRaw is do() without the JSON encoding step, for the one endpoint whose
+// request body is not JSON: /uploads.json takes the file's raw bytes. The
+// response is still JSON, and every non-2xx is still an *APIError, so both
+// callers report failures identically.
+func (c *Client) doRaw(method, path string, query url.Values, contentType string, reqBody io.Reader, out any) error {
+	u := c.baseURL + path
+	if len(query) > 0 {
+		u += "?" + query.Encode()
+	}
 
 	req, err := http.NewRequest(method, u, reqBody)
 	if err != nil {
 		return fmt.Errorf("building request: %w", err)
 	}
 	req.Header.Set("X-Redmine-API-Key", c.apiKey)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.http.Do(req)
