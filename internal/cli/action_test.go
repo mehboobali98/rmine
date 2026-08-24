@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -57,7 +58,7 @@ func TestMutatingCommandsEmitJSON(t *testing.T) {
 			if err := json.Unmarshal([]byte(out), &got); err != nil {
 				t.Fatalf("output isn't valid JSON: %v\noutput: %s", err, out)
 			}
-			if got != c.want {
+			if !reflect.DeepEqual(got, c.want) {
 				t.Errorf("result = %+v, want %+v", got, c.want)
 			}
 		})

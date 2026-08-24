@@ -70,7 +70,40 @@ func findIDByName(items []IDName, name string) (int, error) {
 			return item.ID, nil
 		}
 	}
-	return 0, fmt.Errorf("%w for %q", ErrNoMatch, name)
+	return 0, noMatch(name, items)
+}
+
+// maxListedCandidates caps how many valid names a rejection spells out.
+// Trackers and statuses are short lists, but categories and versions run to
+// hundreds on a long-lived project, and a screen of names buries the sentence
+// that matters.
+const maxListedCandidates = 15
+
+// noMatch builds the error for a name that resolved to nothing, listing what
+// would have worked.
+//
+// The bare "no match" this replaces left the caller to go find the valid
+// spellings somewhere else — and for trackers, statuses, priorities and
+// activities there was nowhere else in rmine to look. Naming the candidates
+// turns every failed lookup into the enumeration the caller needed, which is
+// most of what a discovery command would have been for.
+func noMatch(name string, items []IDName) error {
+	if len(items) == 0 {
+		return fmt.Errorf("%w for %q", ErrNoMatch, name)
+	}
+
+	shown := items
+	suffix := ""
+	if len(shown) > maxListedCandidates {
+		shown = shown[:maxListedCandidates]
+		suffix = fmt.Sprintf(", ... (%d more)", len(items)-maxListedCandidates)
+	}
+
+	names := make([]string, 0, len(shown))
+	for _, item := range shown {
+		names = append(names, item.Name)
+	}
+	return fmt.Errorf("%w for %q (available: %s%s)", ErrNoMatch, name, strings.Join(names, ", "), suffix)
 }
 
 // ResolveTrackerID resolves a tracker name (e.g. "Bug") to its ID.
@@ -118,12 +151,14 @@ func (c *Client) ResolveIssueStatusID(name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	names := make([]IDName, 0, len(statuses))
 	for _, s := range statuses {
 		if strings.EqualFold(s.Name, name) {
 			return s.ID, nil
 		}
+		names = append(names, IDName{ID: s.ID, Name: s.Name})
 	}
-	return 0, fmt.Errorf("status: %w for %q", ErrNoMatch, name)
+	return 0, fmt.Errorf("status: %w", noMatch(name, names))
 }
 
 // DefaultClosedStatusID returns the ID of the first status flagged as

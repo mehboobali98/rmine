@@ -42,9 +42,22 @@ scraping table output.
 
 `-o json` works on **every** command, including the ones that change
 something: those return `{"status": "...", "issue": 1234}` (or `time_entry`,
-`profile`, `path`), so a write can be confirmed by parsing rather than by
-matching English. Empty lists come back as `[]`, never `null`. Prompts and
-warnings go to stderr, so stdout is always parseable on its own.
+`relation`, `profile`, `path`), so a write can be confirmed by parsing rather
+than by matching English. Empty lists come back as `[]`, never `null`. Prompts
+and warnings go to stderr, so stdout is always parseable on its own.
+
+**Failures are JSON too.** Under `-o json`, stdout carries
+
+```json
+{"error": {"message": "redmine returned 422: Subject cannot be blank", "status": 422, "errors": ["Subject cannot be blank"]}}
+```
+
+so every outcome parses — check for an `error` key before reading a result.
+`status` and `errors` appear only when Redmine itself rejected the call. That
+distinction matters most on `create`: a 422 means nothing was written and
+resending with the missing field is safe, while a transport error means the
+create may well have landed, so **list before retrying** rather than risking a
+duplicate ticket.
 
 ## Common request → command mappings
 
@@ -63,6 +76,11 @@ warnings go to stderr, so stdout is always parseable on its own.
 - "push ticket 1234's due date to Friday" → `rmine issue update 1234 --due-date 2026-08-28`
 - "unassign ticket 1234" → `rmine issue update 1234 --assignee 0`
 - "comment on ticket 1234: ..." → `rmine issue comment 1234 "..."`
+- "attach this file to ticket 1234" → `rmine issue comment 1234 "..." --attach ./file.pdf`
+- "put ticket 1234 in the next sprint" → `rmine issue update 1234 --version "Sprint 42"`
+- "what's in Sprint 42" → `rmine issue list --project "X" --version "Sprint 42"`
+- "1234 has to ship before 1235" → `rmine issue relate 1234 precedes 1235`
+- "what are 1234's subtasks" → `rmine issue view 1234 -o json` (read `children`)
 
 ## Name matching gotchas
 
@@ -114,6 +132,18 @@ API is admin-only. Set them generically by numeric ID:
 Find a field's ID by inspecting an existing issue that already has it set:
 `rmine issue view <id> -o json`.
 
+**A tracker exposes only some of an instance's custom fields, and Redmine
+does not reject a write naming one outside that set** — it returns 200 and
+drops the value. rmine reads back what the server stored and reports the
+difference: a warning on stderr, and `"dropped_fields": [33]` in the `-o json`
+output of `create` and `update`. The command still exits 0, because the write
+did happen and resending a `create` would file a second ticket.
+
+So: after any write with `--field`, check `dropped_fields`. If it is non-empty
+those values are **not** on the issue — set them on a tracker that exposes
+them, or tell the user the field is unavailable. Never report a field as set
+without looking.
+
 ## Setting and clearing fields
 
 `issue create` and `issue update` take `--start-date`, `--due-date`,
@@ -125,12 +155,80 @@ explicitly empty one clears the field:
 - `--assignee 0` unassigns, `--parent 0` detaches from the parent
 - `--category ""` removes the category, `--estimated-hours 0` drops the estimate
 - `--description ""` empties the description
+- `--version ""` clears the target version
 - `--done-ratio 0` is a real value (0%), **not** a clear
 
-## Categories
+`--notes "..."` on `update` records a journal comment **on the same entry as
+the field changes**, so the note explains the edit rather than trailing it as
+a separate remark. Prefer it over a follow-up `issue comment` when the comment
+is about the change you are making.
 
-Project-specific, matched case-insensitively by name. Discover a project's
-valid categories before guessing: `rmine project categories <project>`.
+## Discovering valid values
+
+Every name-matching flag has a command that enumerates what it accepts, so a
+`create` can be constructed without sampling existing issues:
+
+| To fill in | Run |
+|---|---|
+| `--tracker` | `rmine tracker list`, or `rmine project view <project>` for the ones this project accepts |
+| `--status` | `rmine status list` (its `CLOSED` column shows which close an issue) |
+| `--priority` | `rmine priority list` |
+| `--category` | `rmine project categories <project>` |
+| `--version` | `rmine project versions <project>` |
+| `--activity` | `rmine activity list` |
+
+`rmine project view <project>` answers several of these at once: it returns
+the project's trackers, issue categories and enabled modules alongside the
+usual fields. It accepts a numeric ID, an identifier **or** a display name,
+as every other project-taking command does.
+
+A name that matches nothing is rejected with the valid spellings listed —
+`status: no match for "Doing" (available: New, In Progress, Resolved)` — so a
+wrong guess is self-correcting rather than a dead end.
+
+Categories and versions are **project-specific**; trackers, statuses,
+priorities and activities are server-wide.
+
+## Target version
+
+`--version` sets Redmine's `fixed_version` on `create` and `update`, takes a
+name or a numeric ID, and clears the field when passed `""` on `update`. As a
+filter on `issue list` it also accepts `*` (any version) and `!*` (none).
+A **name** needs a project in scope to resolve, since version names repeat
+across projects; on `issue update` the issue's own project is used.
+
+## Attachments on write
+
+`--attach <path>` (repeatable) uploads a local file and attaches it, on
+`issue create`, `issue update` and `issue comment`:
+
+```sh
+rmine issue create --project "X" --subject "Q3 report" --attach ./report.pdf
+rmine issue comment 1234 "Attaching the spec" --attach ./spec.pdf
+```
+
+Each file is uploaded before the write it belongs to, so a rejected write
+leaves nothing half-attached. **Don't write "see attached" into a description
+until the create that carries the file has succeeded** — that claim is what
+`--attach` exists to make true.
+
+## Relations
+
+```sh
+rmine issue relate 100 precedes 200      # #100 precedes #200
+rmine issue relations 100                # list #100's links
+rmine issue unrelate 42 -y               # remove relation #42
+```
+
+The type reads left to right. Valid types: `relates`, `blocks`, `blocked`,
+`precedes`, `follows`, `duplicates`, `duplicated`, `copied_to`, `copied_from`.
+`--delay <days>` applies to `precedes`/`follows` only.
+
+`relations` renders each link from the point of view of the issue you asked
+about, so the far end of a `precedes` correctly reads as `follows`. `unrelate`
+takes the **relation's** ID (the `ID` column of `relations`), not an issue's.
+
+A real dependency belongs in a relation, not in prose in both descriptions.
 
 ## Required-field validation
 
@@ -138,7 +236,9 @@ Mandatory fields — standard or custom — vary per Redmine instance and per
 project/tracker within one, and there's no reliable way to know them ahead
 of time. Don't try to pre-validate: just issue the `create`/`update`, and if
 something required is missing the server's error names it exactly (e.g.
-`redmine returned 422: Category cannot be blank`). Retry with that field set.
+`redmine returned 422: Category cannot be blank`). Retry with that field set —
+under `-o json` those names are in the `error.errors` array, and a `status` of
+422 confirms nothing was written, so the retry cannot duplicate.
 
 ## Filter caveats
 
@@ -163,6 +263,11 @@ than the bare number. `issue list -o json` carries `url` per issue too, and alwa
 dwarfs the issue itself — so pass `--comments` when you need them. In `-o json`
 they land under `attachments` and `journals`; a journal with empty `notes` is a
 bare field change, not a comment, and is worth skipping.
+
+`issue view` also returns the issue's **`children`** (the subtask tree, nested,
+each with `id`, `tracker` and `subject`) and its **`relations`**. Verifying that
+subtasks were parented correctly is one `issue view` on the parent — there is
+no need to fetch each child and inspect its `parent.id`.
 
 `rmine issue attachments <id>` lists them on their own. `--download <dir>`
 writes every attachment into that directory, creating it if needed:
@@ -193,15 +298,23 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine whoami` | Active profile's authenticated user |
 | `rmine version` | The running rmine's version |
 | `rmine project list` | Browse projects |
-| `rmine project view <id>` | One project's details |
+| `rmine project view <project>` | One project's details, trackers, categories and enabled modules; takes an ID, identifier or display name |
 | `rmine project categories <project>` | List a project's issue categories |
-| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects` |
-| `rmine issue view <id>` | Full issue detail, custom fields, web `url`, and attachments; `--comments` to also fetch comments |
+| `rmine project versions <project>` | List a project's target versions |
+| `rmine tracker list` | Trackers defined on this server |
+| `rmine status list` | Issue statuses, and which close an issue |
+| `rmine priority list` | Issue priorities |
+| `rmine activity list` | Time-entry activities |
+| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects` |
+| `rmine issue view <id>` | Full issue detail, custom fields, web `url`, attachments, `children` and `relations`; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
-| `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field` |
-| `rmine issue update <id>` | Same optional flags as create, plus `--status` |
+| `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach` |
+| `rmine issue update <id>` | Same optional flags as create, plus `--status` and `--notes` |
 | `rmine issue close <id>` | `--status` to pick a specific closed status |
-| `rmine issue comment <id> <note>` | Add a comment |
+| `rmine issue comment <id> <note>` | Add a comment; `--attach` to include files |
+| `rmine issue relations <id>` | List an issue's links to other issues |
+| `rmine issue relate <id> <type> <other-id>` | Link two issues; `--delay` for precedes/follows |
+| `rmine issue unrelate <relation-id>` | Remove a link; prompts unless `--force` |
 | `rmine time log/list/edit/delete` | See above; log takes an issue ID or `--project`, plus `--hours` (required), `--date`, `--activity`, `--comment`; list takes `--issue`, `--project`, `--user`, `--from`, `--to`, `--sort`, `--limit`, `--all`, `--all-projects`; delete prompts unless `--force` |
 | `rmine config init/add-profile/use-profile/list-profiles` | Manage server profiles |
 | `rmine config set-default-project <project>` | Set the active profile's default project (`""` clears it) |

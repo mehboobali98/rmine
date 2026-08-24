@@ -37,7 +37,7 @@ func TestGetIssueIncludesAttachmentsAndOptionallyJournals(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			issue, err := New(srv.URL, "test-key").GetIssue(1, tc.withComment)
+			issue, err := New(srv.URL, "test-key").GetIssue(1, GetIssueOptions{Comments: tc.withComment})
 			if err != nil {
 				t.Fatalf("GetIssue: %v", err)
 			}
