@@ -2,6 +2,9 @@
 
 A command-line client for [Redmine](https://www.redmine.org/) — issues, projects, and time logging, without leaving the terminal. Supports multiple Redmine servers via named profiles.
 
+On the design decisions that only make sense because an agent is the second caller:
+[What changed when an agent started using my CLI](https://mehboob.dev/blog/designing-a-cli-for-agents).
+
 ## Install
 
 Download a binary from the [Releases](https://github.com/mehboobali98/rmine/releases) page, or build from source:
