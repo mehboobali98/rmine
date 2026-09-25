@@ -3,7 +3,6 @@ package redmine
 import (
 	"fmt"
 	"net/url"
-	"strings"
 )
 
 // Version is a project's target version (Redmine's fixed_version) — the
@@ -50,10 +49,11 @@ func (c *Client) ResolveVersionID(projectIDOrIdentifier, name string) (int, erro
 	}
 	names := make([]IDName, 0, len(versions))
 	for _, v := range versions {
-		if strings.EqualFold(v.Name, name) {
-			return v.ID, nil
-		}
 		names = append(names, IDName{ID: v.ID, Name: v.Name})
 	}
-	return 0, fmt.Errorf("version: %w", noMatch(name, names))
+	id, err := findIDByName(names, name)
+	if err != nil {
+		return 0, fmt.Errorf("version: %w", err)
+	}
+	return id, nil
 }
