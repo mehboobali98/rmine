@@ -159,6 +159,7 @@ type IssueListFilter struct {
 	DueAfter      string // YYYY-MM-DD
 	DueBefore     string // YYYY-MM-DD
 	VersionID     string // fixed_version_id; "*" for any, "!*" for none
+	ParentID      string // direct children of this issue
 	Sort          string // Redmine sort spec, e.g. "due_date:asc,priority:desc"
 	Limit         int    // 0 means "use Redmine's default page size"
 	All           bool   // ignore Limit and fetch every matching issue
@@ -202,6 +203,9 @@ func buildAdvancedIssueFilter(f IssueListFilter) url.Values {
 		default:
 			addField("fixed_version_id", "=", f.VersionID)
 		}
+	}
+	if f.ParentID != "" {
+		addField("parent_id", "=", f.ParentID)
 	}
 	if f.StatusID != "" {
 		switch f.StatusID {
@@ -267,6 +271,9 @@ func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 		}
 		if f.VersionID != "" {
 			base.Set("fixed_version_id", f.VersionID)
+		}
+		if f.ParentID != "" {
+			base.Set("parent_id", f.ParentID)
 		}
 		if f.UpdatedAfter != "" || f.UpdatedBefore != "" {
 			base.Set("updated_on", dateRangeFilter(f.UpdatedAfter, f.UpdatedBefore))
