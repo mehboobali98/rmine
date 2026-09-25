@@ -29,7 +29,7 @@ rm -rf ~/.config/rmine          # also drop saved profiles/API keys
 rmine config init
 ```
 
-You'll be asked for your Redmine server URL and a personal API key (found under *My account → API access key* in Redmine). This saves a `default` profile and verifies it works, then offers to install a [Claude Code](https://claude.com/claude-code) skill (`~/.claude/skills/rmine/`) so an AI assistant knows how to drive rmine — run `rmine skill install` any time to (re)install it manually.
+You'll be asked for your Redmine server URL and a personal API key (found under *My account → API access key* in Redmine). This saves a `default` profile and verifies it works, then offers to install a [Claude Code](https://claude.com/claude-code) skill (`~/.claude/skills/rmine/`) so an AI assistant knows how to drive rmine — run `rmine skill install` any time to (re)install it manually. After an upgrade, every command prints a one-line reminder on stderr until the installed skill matches the running rmine.
 
 ```sh
 rmine whoami

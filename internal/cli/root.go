@@ -30,9 +30,11 @@ var rootCmd = &cobra.Command{
 		// about to parse, silently not the one it asked for.
 		switch outputFlag {
 		case "table", "json":
-			return nil
+		default:
+			return fmt.Errorf("--output must be table or json, got %q", outputFlag)
 		}
-		return fmt.Errorf("--output must be table or json, got %q", outputFlag)
+		warnStaleSkills(cmd)
+		return nil
 	},
 }
 
