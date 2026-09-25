@@ -354,7 +354,7 @@ var issueCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		description, err := descriptionFlag(cmd)
+		description, err := textFlag(cmd, "description", "description-file")
 		if err != nil {
 			return err
 		}
@@ -479,7 +479,11 @@ var issueUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		description, err := descriptionFlag(cmd)
+		description, err := textFlag(cmd, "description", "description-file")
+		if err != nil {
+			return err
+		}
+		notes, err := textFlag(cmd, "notes", "notes-file")
 		if err != nil {
 			return err
 		}
@@ -515,7 +519,7 @@ var issueUpdateCmd = &cobra.Command{
 			EstimatedHours: flagFloat64(cmd, "estimated-hours"),
 			DoneRatio:      flagInt(cmd, "done-ratio"),
 			CustomFields:   customFields,
-			Notes:          flagString(cmd, "notes"),
+			Notes:          notes,
 		}
 		if trackerName != "" {
 			id, err := client.ResolveTrackerID(trackerName)
@@ -647,11 +651,15 @@ var issueCloseCmd = &cobra.Command{
 }
 
 var issueCommentCmd = &cobra.Command{
-	Use:   "comment <id> <note>",
+	Use:   "comment <id> [note]",
 	Short: "Add a comment to an issue",
-	Args:  cobra.ExactArgs(2),
+	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseIssueID(args[0])
+		if err != nil {
+			return err
+		}
+		note, err := commentNote(cmd, args)
 		if err != nil {
 			return err
 		}
@@ -664,11 +672,34 @@ var issueCommentCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := client.AddNote(id, args[1], uploads); err != nil {
+		if err := client.AddNote(id, note, uploads); err != nil {
 			return err
 		}
 		return printAction(fmt.Sprintf("Commented on issue #%d", id), actionResult{Status: "commented", Issue: id})
 	},
+}
+
+// commentNote returns the note given as the second argument or read from
+// --file. An empty file is an error, since Redmine drops a blank note without
+// recording anything.
+func commentNote(cmd *cobra.Command, args []string) (string, error) {
+	path, _ := cmd.Flags().GetString("file")
+	switch {
+	case cmd.Flags().Changed("file") && len(args) == 2:
+		return "", fmt.Errorf("pass the note as an argument or with --file, not both")
+	case len(args) == 2:
+		return args[1], nil
+	case !cmd.Flags().Changed("file"):
+		return "", fmt.Errorf("a note is required, as an argument or with --file")
+	}
+	note, err := readTextFile("--file", path)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(note) == "" {
+		return "", fmt.Errorf("--file: %s is empty", path)
+	}
+	return note, nil
 }
 
 var issueRelationsCmd = &cobra.Command{
@@ -839,6 +870,8 @@ func init() {
 	issueUpdateCmd.Flags().Int("done-ratio", 0, "new percent complete (0-100)")
 	issueUpdateCmd.Flags().String("version", "", "new target version `name` or ID, or \"\" to clear (see rmine project versions <project>)")
 	issueUpdateCmd.Flags().String("notes", "", "journal comment recorded alongside this change")
+	issueUpdateCmd.Flags().String("notes-file", "", "read the journal comment from a file, or from stdin with -")
+	issueUpdateCmd.MarkFlagsMutuallyExclusive("notes", "notes-file")
 	issueUpdateCmd.Flags().StringArray("attach", nil, "attach a local file (repeatable)")
 	issueUpdateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable)")
 
@@ -849,6 +882,7 @@ func init() {
 	issueAttachmentsCmd.Flags().String("download", "", "download every attachment into this directory")
 
 	issueCommentCmd.Flags().StringArray("attach", nil, "attach a local file (repeatable)")
+	issueCommentCmd.Flags().String("file", "", "read the note from a file, or from stdin with -")
 
 	issueRelateCmd.Flags().Int("delay", 0, "days between the two issues (precedes/follows only)")
 	issueUnrelateCmd.Flags().BoolP("force", "y", false, "skip the confirmation prompt")
@@ -873,14 +907,22 @@ func flagString(cmd *cobra.Command, name string) *string {
 	return &v
 }
 
-// descriptionFlag returns the description given by --description or
-// --description-file, or nil when neither was passed. A file of "-" means
-// stdin.
-func descriptionFlag(cmd *cobra.Command) (*string, error) {
-	if !cmd.Flags().Changed("description-file") {
-		return flagString(cmd, "description"), nil
+// textFlag returns the text given by the inline flag, or read from the file
+// named by fileFlag, or nil when neither was passed.
+func textFlag(cmd *cobra.Command, inline, fileFlag string) (*string, error) {
+	if !cmd.Flags().Changed(fileFlag) {
+		return flagString(cmd, inline), nil
 	}
-	path, _ := cmd.Flags().GetString("description-file")
+	path, _ := cmd.Flags().GetString(fileFlag)
+	text, err := readTextFile("--"+fileFlag, path)
+	if err != nil {
+		return nil, err
+	}
+	return &text, nil
+}
+
+// readTextFile reads the file at path, or stdin when path is "-".
+func readTextFile(flag, path string) (string, error) {
 	var b []byte
 	var err error
 	if path == "-" {
@@ -889,10 +931,9 @@ func descriptionFlag(cmd *cobra.Command) (*string, error) {
 		b, err = os.ReadFile(path)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("--description-file: %w", err)
+		return "", fmt.Errorf("%s: %w", flag, err)
 	}
-	s := string(b)
-	return &s, nil
+	return string(b), nil
 }
 
 func derefString(s *string) string {

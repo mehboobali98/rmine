@@ -75,7 +75,7 @@ duplicate ticket.
 - "close ticket 1234" → `rmine issue close 1234`
 - "push ticket 1234's due date to Friday" → `rmine issue update 1234 --due-date 2026-08-28`
 - "unassign ticket 1234" → `rmine issue update 1234 --assignee 0`
-- "comment on ticket 1234: ..." → `rmine issue comment 1234 "..."`
+- "comment on ticket 1234: ..." → `rmine issue comment 1234 "..."`, or `rmine issue comment 1234 --file note.md` for anything multi-line
 - "attach this file to ticket 1234" → `rmine issue comment 1234 "..." --attach ./file.pdf`
 - "put ticket 1234 in the next sprint" → `rmine issue update 1234 --version "Sprint 42"`
 - "what's in Sprint 42" → `rmine issue list --project "X" --version "Sprint 42"`
@@ -170,7 +170,9 @@ explicitly empty one clears the field:
 For a long body, write it to a file and pass `--description-file <path>`
 (`-` reads stdin) instead of `--description`, on `create` or `update`. It
 avoids quoting a Markdown body through the shell; the two flags are mutually
-exclusive.
+exclusive. The same goes for comments: `--notes-file` on `update`, and
+`issue comment <id> --file <path>` in place of the note argument. An empty
+comment file is rejected.
 
 `--notes "..."` on `update` records a journal comment **on the same entry as
 the field changes**, so the note explains the edit rather than trailing it as
@@ -325,9 +327,9 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine issue view <id>` | Full issue detail, custom fields, web `url`, attachments, `children` and `relations`; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
 | `rmine issue create` | `--project`, `--subject` required; `--description` or `--description-file`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach` |
-| `rmine issue update <id>` | Same optional flags as create, plus `--status` and `--notes` |
+| `rmine issue update <id>` | Same optional flags as create, plus `--status` and `--notes` or `--notes-file` |
 | `rmine issue close <id>` | `--status` to pick a specific closed status |
-| `rmine issue comment <id> <note>` | Add a comment; `--attach` to include files |
+| `rmine issue comment <id> [note]` | Add a comment; `--file` to read it from a file or stdin, `--attach` to include files |
 | `rmine issue relations <id>` | List an issue's links to other issues |
 | `rmine issue relate <id> <type> <other-id>` | Link two issues; `--delay` for precedes/follows |
 | `rmine issue unrelate <relation-id>` | Remove a link; prompts unless `--force` |
