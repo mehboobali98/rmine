@@ -160,9 +160,17 @@ type IssueListFilter struct {
 	DueBefore     string // YYYY-MM-DD
 	VersionID     string // fixed_version_id; "*" for any, "!*" for none
 	ParentID      string // direct children of this issue
+	CustomFields  []CustomFieldFilter
 	Sort          string // Redmine sort spec, e.g. "due_date:asc,priority:desc"
 	Limit         int    // 0 means "use Redmine's default page size"
 	All           bool   // ignore Limit and fetch every matching issue
+}
+
+// CustomFieldFilter matches issues whose custom field ID equals any of
+// Values. A single value of "*" matches any set value and "!*" an unset one.
+type CustomFieldFilter struct {
+	ID     int
+	Values []string
 }
 
 type issueListResponse struct {
@@ -238,6 +246,14 @@ func buildAdvancedIssueFilter(f IssueListFilter) url.Values {
 	if f.Subject != "" {
 		addField("subject", "~", f.Subject)
 	}
+	for _, cf := range f.CustomFields {
+		field := "cf_" + strconv.Itoa(cf.ID)
+		if len(cf.Values) == 1 && (cf.Values[0] == "*" || cf.Values[0] == "!*") {
+			addField(field, cf.Values[0])
+		} else {
+			addField(field, "=", cf.Values...)
+		}
+	}
 	return q
 }
 
@@ -249,11 +265,13 @@ func (c *Client) ListIssues(f IssueListFilter) ([]Issue, error) {
 	// Redmine's issues.json only reads params[:f] (the advanced filter
 	// array) OR the simple field params (project_id=, status_id=, ...) —
 	// never both. A subject search needs the advanced form (op "~" for
-	// "contains" isn't expressible as a simple param), so once Subject is
-	// set every other active filter has to move to the advanced form too,
-	// or it would be silently ignored.
+	// "contains" isn't expressible as a simple param), and so do custom
+	// fields, whose simple cf_N=value form reads a leading "!", "~" or "*"
+	// in the value as an operator. Once either is set every other active
+	// filter has to move to the advanced form too, or it would be silently
+	// ignored.
 	var base url.Values
-	if f.Subject != "" {
+	if f.Subject != "" || len(f.CustomFields) > 0 {
 		base = buildAdvancedIssueFilter(f)
 	} else {
 		base = url.Values{}
