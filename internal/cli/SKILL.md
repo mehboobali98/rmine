@@ -79,6 +79,7 @@ duplicate ticket.
 - "attach this file to ticket 1234" → `rmine issue comment 1234 "..." --attach ./file.pdf`
 - "put ticket 1234 in the next sprint" → `rmine issue update 1234 --version "Sprint 42"`
 - "what's in Sprint 42" → `rmine issue list --project "X" --version "Sprint 42"`
+- "open subtasks of 1234" → `rmine issue list --parent 1234 --status open`
 - "1234 has to ship before 1235" → `rmine issue relate 1234 precedes 1235`
 - "what are 1234's subtasks" → `rmine issue view 1234 -o json` (read `children`)
 
@@ -311,7 +312,7 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine status list` | Issue statuses, and which close an issue |
 | `rmine priority list` | Issue priorities |
 | `rmine activity list` | Time-entry activities |
-| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects` |
+| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--parent`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects` |
 | `rmine issue view <id>` | Full issue detail, custom fields, web `url`, attachments, `children` and `relations`; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
 | `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach` |

@@ -37,6 +37,7 @@ var issueListCmd = &cobra.Command{
 		overdue, _ := cmd.Flags().GetBool("overdue")
 		allProjects, _ := cmd.Flags().GetBool("all-projects")
 		version, _ := cmd.Flags().GetString("version")
+		parent, _ := cmd.Flags().GetString("parent")
 		sort, _ := cmd.Flags().GetString("sort")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
@@ -54,7 +55,12 @@ var issueListCmd = &cobra.Command{
 			return err
 		}
 
-		project, err = projectFilterOrDefault(project, allProjects, false)
+		parent, err = resolveIDFilter("--parent", parent)
+		if err != nil {
+			return err
+		}
+
+		project, err = projectFilterOrDefault(project, allProjects, parent != "")
 		if err != nil {
 			return err
 		}
@@ -104,6 +110,7 @@ var issueListCmd = &cobra.Command{
 			DueAfter:      dueAfter,
 			DueBefore:     dueBefore,
 			VersionID:     version,
+			ParentID:      parent,
 			Sort:          sort,
 			Limit:         limit,
 			All:           all,
@@ -784,6 +791,7 @@ func init() {
 	issueListCmd.Flags().Bool("due-next-week", false, "only issues due next week (Mon-Sun)")
 	issueListCmd.Flags().Bool("overdue", false, "only issues whose due date has already passed")
 	issueListCmd.Flags().String("version", "", "filter by target version name or ID (\"*\" for any, \"!*\" for none); a name needs --project")
+	issueListCmd.Flags().String("parent", "", "only direct subtasks of this issue ID (searches every project unless --project is given)")
 	issueListCmd.Flags().String("sort", "", "sort order, e.g. due_date or \"priority:desc,due_date:asc\"")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
