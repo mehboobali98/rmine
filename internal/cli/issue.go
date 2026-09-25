@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -333,7 +334,6 @@ var issueCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		project, _ := cmd.Flags().GetString("project")
 		subject, _ := cmd.Flags().GetString("subject")
-		description, _ := cmd.Flags().GetString("description")
 		trackerName, _ := cmd.Flags().GetString("tracker")
 		priorityName, _ := cmd.Flags().GetString("priority")
 		categoryName, _ := cmd.Flags().GetString("category")
@@ -351,6 +351,10 @@ var issueCreateCmd = &cobra.Command{
 			return err
 		}
 		customFields, err := parseCustomFields(fieldArgs)
+		if err != nil {
+			return err
+		}
+		description, err := descriptionFlag(cmd)
 		if err != nil {
 			return err
 		}
@@ -381,7 +385,7 @@ var issueCreateCmd = &cobra.Command{
 		req := redmine.CreateIssueRequest{
 			ProjectID:      project,
 			Subject:        subject,
-			Description:    description,
+			Description:    derefString(description),
 			AssignedTo:     assigneeID,
 			ParentID:       parent,
 			StartDate:      startDate,
@@ -475,6 +479,10 @@ var issueUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		description, err := descriptionFlag(cmd)
+		if err != nil {
+			return err
+		}
 
 		client, err := newClient()
 		if err != nil {
@@ -500,7 +508,7 @@ var issueUpdateCmd = &cobra.Command{
 		// an update never rewrites a field it was not asked about.
 		req := redmine.UpdateIssueRequest{
 			Subject:        flagString(cmd, "subject"),
-			Description:    flagString(cmd, "description"),
+			Description:    description,
 			ParentID:       flagInt(cmd, "parent"),
 			StartDate:      flagString(cmd, "start-date"),
 			DueDate:        flagString(cmd, "due-date"),
@@ -799,6 +807,8 @@ func init() {
 	issueCreateCmd.Flags().String("project", "", "project ID, identifier, or name (required unless the profile has a default project)")
 	issueCreateCmd.Flags().String("subject", "", "issue subject (required)")
 	issueCreateCmd.Flags().String("description", "", "issue description")
+	issueCreateCmd.Flags().String("description-file", "", "read the issue description from a file, or from stdin with -")
+	issueCreateCmd.MarkFlagsMutuallyExclusive("description", "description-file")
 	issueCreateCmd.Flags().String("tracker", "", "tracker name, e.g. Bug")
 	issueCreateCmd.Flags().String("priority", "", "priority name, e.g. High")
 	issueCreateCmd.Flags().String("category", "", "issue category name (project-specific; see `rmine project categories <project>`)")
@@ -815,6 +825,8 @@ func init() {
 
 	issueUpdateCmd.Flags().String("subject", "", "new subject")
 	issueUpdateCmd.Flags().String("description", "", "new description")
+	issueUpdateCmd.Flags().String("description-file", "", "read the new description from a file, or from stdin with -")
+	issueUpdateCmd.MarkFlagsMutuallyExclusive("description", "description-file")
 	issueUpdateCmd.Flags().String("tracker", "", "new tracker name")
 	issueUpdateCmd.Flags().String("priority", "", "new priority name")
 	issueUpdateCmd.Flags().String("status", "", "new status name")
@@ -859,6 +871,35 @@ func flagString(cmd *cobra.Command, name string) *string {
 	}
 	v, _ := cmd.Flags().GetString(name)
 	return &v
+}
+
+// descriptionFlag returns the description given by --description or
+// --description-file, or nil when neither was passed. A file of "-" means
+// stdin.
+func descriptionFlag(cmd *cobra.Command) (*string, error) {
+	if !cmd.Flags().Changed("description-file") {
+		return flagString(cmd, "description"), nil
+	}
+	path, _ := cmd.Flags().GetString("description-file")
+	var b []byte
+	var err error
+	if path == "-" {
+		b, err = io.ReadAll(os.Stdin)
+	} else {
+		b, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("--description-file: %w", err)
+	}
+	s := string(b)
+	return &s, nil
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func flagInt(cmd *cobra.Command, name string) *int {

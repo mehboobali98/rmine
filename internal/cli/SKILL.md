@@ -165,6 +165,11 @@ explicitly empty one clears the field:
 - `--version ""` clears the target version
 - `--done-ratio 0` is a real value (0%), **not** a clear
 
+For a long body, write it to a file and pass `--description-file <path>`
+(`-` reads stdin) instead of `--description`, on `create` or `update`. It
+avoids quoting a Markdown body through the shell; the two flags are mutually
+exclusive.
+
 `--notes "..."` on `update` records a journal comment **on the same entry as
 the field changes**, so the note explains the edit rather than trailing it as
 a separate remark. Prefer it over a follow-up `issue comment` when the comment
@@ -315,7 +320,7 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--parent`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects` |
 | `rmine issue view <id>` | Full issue detail, custom fields, web `url`, attachments, `children` and `relations`; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
-| `rmine issue create` | `--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach` |
+| `rmine issue create` | `--project`, `--subject` required; `--description` or `--description-file`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach` |
 | `rmine issue update <id>` | Same optional flags as create, plus `--status` and `--notes` |
 | `rmine issue close <id>` | `--status` to pick a specific closed status |
 | `rmine issue comment <id> <note>` | Add a comment; `--attach` to include files |
