@@ -347,3 +347,38 @@ func atoiOrZero(s string) int {
 	}
 	return n
 }
+
+func TestListIssuesCustomFieldFiltersUseAdvancedFilters(t *testing.T) {
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		json.NewEncoder(w).Encode(issueListResponse{})
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, "test-key")
+	_, err := client.ListIssues(IssueListFilter{
+		ProjectID: "42",
+		CustomFields: []CustomFieldFilter{
+			{ID: 33, Values: []string{"!Urgent", "Platform"}},
+			{ID: 6, Values: []string{"*"}},
+			{ID: 19, Values: []string{"!*"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ListIssues: %v", err)
+	}
+
+	if got := gotQuery["v[cf_33][]"]; gotQuery.Get("op[cf_33]") != "=" || !reflect.DeepEqual(got, []string{"!Urgent", "Platform"}) {
+		t.Errorf("cf_33 = op %q values %v, want = [!Urgent Platform]", gotQuery.Get("op[cf_33]"), got)
+	}
+	if gotQuery.Get("op[cf_6]") != "*" || gotQuery["v[cf_6][]"] != nil {
+		t.Errorf("cf_6 = op %q values %v, want * with no values", gotQuery.Get("op[cf_6]"), gotQuery["v[cf_6][]"])
+	}
+	if gotQuery.Get("op[cf_19]") != "!*" {
+		t.Errorf("op[cf_19] = %q, want !*", gotQuery.Get("op[cf_19]"))
+	}
+	if gotQuery.Get("v[project_id][]") != "42" || gotQuery.Get("cf_33") != "" || gotQuery.Get("project_id") != "" {
+		t.Errorf("filters should all be in advanced form: %v", gotQuery)
+	}
+}
