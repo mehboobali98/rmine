@@ -92,7 +92,7 @@ Because that scoping comes from stored configuration rather than from the comman
 | `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--parent`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects`) |
 | `rmine issue view <id>` | Show issue details, its web link, attachments, subtasks and relations (`--comments` to also fetch comments) |
 | `rmine issue attachments <id>` | List an issue's attachments (`--download <dir>` to save them all) |
-| `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach`) |
+| `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description` or `--description-file`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach`) |
 | `rmine issue update <id>` | Edit an issue (same optional flags as create, plus `--status` and `--notes`) |
 | `rmine issue close <id>` | Close an issue (`--status` to pick a specific closed status) |
 | `rmine issue comment <id> <note>` | Add a comment (`--attach` to include files) |
@@ -141,6 +141,8 @@ Files are attached with `--attach <path>`, repeatable, on `issue create`, `issue
 Issues are linked with `rmine issue relate <id> <type> <other-id>`, where the type reads left to right — `relate 100 precedes 200` records that #100 precedes #200. Valid types are `relates`, `blocks`, `blocked`, `precedes`, `follows`, `duplicates`, `duplicated`, `copied_to` and `copied_from`; `--delay <days>` applies to `precedes`/`follows` only. `rmine issue relations <id>` lists an issue's links from that issue's point of view (so the other end of a `precedes` correctly reads as `follows`), and `rmine issue unrelate <relation-id>` removes one.
 
 On `issue update`, a flag you don't pass is left alone on the server, and passing an empty one clears the field: `--assignee 0` unassigns, `--parent 0` detaches from the parent, `--category ""` removes the category, `--estimated-hours 0` drops the estimate, and `--description ""` empties the description. `--done-ratio 0` is a real value — 0% — not a clear.
+
+For a long description, pass `--description-file <path>` (or `-` for stdin) instead of `--description` on `issue create` or `issue update`, rather than quoting the body through the shell.
 
 Different Redmine instances (and different projects/trackers within one) can require different mandatory fields — including custom fields. There's no reliable way to know these ahead of time (the field-configuration API is admin-only), so `rmine` just relies on Redmine's own validation: a `create`/`update` that's missing a required field returns the server's exact error (e.g. `redmine returned 422: Category cannot be blank`), naming what's missing so you can retry with it set.
 
