@@ -3,7 +3,9 @@ package redmine
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"unicode"
 )
 
 // ErrNoMatch reports that a lookup completed and nothing matched the given
@@ -64,13 +66,45 @@ func (c *Client) ListTimeEntryActivities() ([]IDName, error) {
 	return resp.TimeEntryActivities, nil
 }
 
+// findIDByName matches name case-insensitively, then falls back to ignoring
+// whitespace, hyphens and underscores. A loose spelling that fits more than
+// one item is an error.
 func findIDByName(items []IDName, name string) (int, error) {
 	for _, item := range items {
 		if strings.EqualFold(item.Name, name) {
 			return item.ID, nil
 		}
 	}
-	return 0, noMatch(name, items)
+
+	want := looseName(name)
+	var loose []IDName
+	for _, item := range items {
+		if want != "" && looseName(item.Name) == want {
+			loose = append(loose, item)
+		}
+	}
+	switch len(loose) {
+	case 0:
+		return 0, noMatch(name, items)
+	case 1:
+		return loose[0].ID, nil
+	default:
+		names := make([]string, 0, len(loose))
+		for _, item := range loose {
+			names = append(names, strconv.Quote(item.Name))
+		}
+		return 0, fmt.Errorf("%q is ambiguous, it could be any of: %s", name, strings.Join(names, ", "))
+	}
+}
+
+// looseName lowercases s and drops whitespace, hyphens and underscores.
+func looseName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) || r == '-' || r == '_' {
+			return -1
+		}
+		return unicode.ToLower(r)
+	}, s)
 }
 
 // maxListedCandidates caps how many valid names a rejection spells out.
@@ -153,12 +187,13 @@ func (c *Client) ResolveIssueStatusID(name string) (int, error) {
 	}
 	names := make([]IDName, 0, len(statuses))
 	for _, s := range statuses {
-		if strings.EqualFold(s.Name, name) {
-			return s.ID, nil
-		}
 		names = append(names, IDName{ID: s.ID, Name: s.Name})
 	}
-	return 0, fmt.Errorf("status: %w", noMatch(name, names))
+	id, err := findIDByName(names, name)
+	if err != nil {
+		return 0, fmt.Errorf("status: %w", err)
+	}
+	return id, nil
 }
 
 // DefaultClosedStatusID returns the ID of the first status flagged as

@@ -88,6 +88,12 @@ duplicate ticket.
 case-insensitively by name (`in progress` finds `In Progress`, `assetsonar
 scrum team` finds `AssetSonar Scrum Team`) — no need for exact server casing.
 
+Trackers, statuses, priorities, activities, categories and versions also fall
+back to ignoring whitespace, hyphens and underscores when nothing matches
+exactly: `Sub-task` finds a tracker named `SubTask`, and `Internal` finds a
+category saved as `Internal ` with a trailing space. A loose spelling that
+fits more than one name is an error naming them all.
+
 `--assignee` and `time list --user` take a numeric Redmine user ID, the
 literal `me`, or a person's **name**.
 

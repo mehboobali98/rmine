@@ -48,7 +48,7 @@ rmine issue update 1234 --status "In Progress" --assignee 42
 rmine issue list --project "AssetSonar Scrum Team" --status "in progress" --due-next-week
 ```
 
-`--project`, `--status`, `--tracker` and `--category` match names case-insensitively (`in progress` finds `In Progress`), so you don't need exact server casing. `--due-within N`, `--due-next-week` and `--overdue` compute the date range for you; `--due-after`/`--due-before` take explicit `YYYY-MM-DD` dates if you need a custom range.
+`--project`, `--status`, `--tracker` and `--category` match names case-insensitively (`in progress` finds `In Progress`), so you don't need exact server casing. Tracker, status, priority, activity, category and version names also fall back to ignoring whitespace, hyphens and underscores, so `Sub-task` finds `SubTask` and `Internal` finds a category saved as `Internal ` with a trailing space. `--due-within N`, `--due-next-week` and `--overdue` compute the date range for you; `--due-after`/`--due-before` take explicit `YYYY-MM-DD` dates if you need a custom range.
 
 ```sh
 rmine issue create --project "X" --subject "Ship it" --version "Sprint 42" --attach ./spec.pdf
