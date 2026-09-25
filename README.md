@@ -85,6 +85,7 @@ Because that scoping comes from stored configuration rather than from the comman
 | `rmine project view <project>` | Show one project's details, plus its trackers, categories and enabled modules |
 | `rmine project categories <project>` | List a project's issue categories |
 | `rmine project versions <project>` | List a project's target versions |
+| `rmine project fields <project>` | List custom field IDs and the trackers that carry them (`--tracker` for one tracker) |
 | `rmine tracker list` | List the trackers defined on this server |
 | `rmine status list` | List the issue statuses, and which of them close an issue |
 | `rmine priority list` | List the issue priorities |
@@ -130,7 +131,7 @@ For unattended setup, `$RMINE_URL` and `$RMINE_API_KEY` supply the two values `r
 
 Assignees can be given as a numeric Redmine user ID, the literal `me`, or a person's name. Names are resolved against the project's member list — `/users.json` is admin-only on most instances, while a project's memberships are readable by its members — so a name needs a project in scope: `--project` on `issue list`, and the issue's own project on `issue update`. An exact name wins; failing that a single substring match is accepted, so `--assignee jane` finds Jane Doe. A name matching several members is an error listing them rather than a guess, since assigning work to the wrong person isn't something the caller can detect. If your API key can't read a project's member list, pass a numeric ID.
 
-Custom fields differ per Redmine instance (and sometimes per project/tracker), so they're set generically by numeric ID: `--field 12=staging`, repeatable to set several distinct fields. Passing the same ID more than once (`--field 11=16 --field 11=27`) instead sets that one field to multiple values, for checkbox/multi-select fields. Find a field's ID by inspecting an existing issue that has it set: `rmine issue view <id> -o json`.
+Custom fields differ per Redmine instance (and sometimes per project/tracker), so they're set generically by numeric ID: `--field 12=staging`, repeatable to set several distinct fields. Passing the same ID more than once (`--field 11=16 --field 11=27`) instead sets that one field to multiple values, for checkbox/multi-select fields. Find a field's ID, and which trackers carry it, with `rmine project fields <project>` (`--tracker <name>` to narrow it). `/custom_fields.json` is admin-only, so this reads the fields off the newest issue of each tracker; a tracker with no issues in the project is named on stderr and under `unsampled_trackers` in `-o json`.
 
 `--category` and `--version` are project-specific and matched case-insensitively by name; list a project's valid values with `rmine project categories <project>` and `rmine project versions <project>`. `--tracker`, `--status`, `--priority` and `--activity` are server-wide — `rmine tracker list`, `rmine status list`, `rmine priority list` and `rmine activity list` enumerate them. A name that matches nothing is rejected with the valid spellings listed, so a wrong guess tells you the right answer.
 

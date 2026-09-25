@@ -820,7 +820,7 @@ func init() {
 	issueCreateCmd.Flags().Int("done-ratio", 0, "percent complete (0-100)")
 	issueCreateCmd.Flags().String("version", "", "target version name or ID (see `rmine project versions <project>`)")
 	issueCreateCmd.Flags().StringArray("attach", nil, "attach a local file (repeatable)")
-	issueCreateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable); find IDs via `rmine issue view <id> -o json` on an existing issue")
+	issueCreateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable); find IDs via `rmine project fields <project>`")
 	_ = issueCreateCmd.MarkFlagRequired("subject")
 
 	issueUpdateCmd.Flags().String("subject", "", "new subject")

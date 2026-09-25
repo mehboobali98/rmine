@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -196,7 +197,97 @@ var projectCategoriesCmd = &cobra.Command{
 	},
 }
 
+// projectField is a custom field and the project's trackers that carry it.
+type projectField struct {
+	ID       int      `json:"id"`
+	Name     string   `json:"name"`
+	Trackers []string `json:"trackers"`
+}
+
+// projectFields is the -o json shape of `project fields`. UnsampledTrackers
+// names trackers with no issue in the project to read fields from, so an
+// absent field is not mistaken for one the tracker lacks.
+type projectFields struct {
+	Fields            []projectField `json:"fields"`
+	UnsampledTrackers []string       `json:"unsampled_trackers"`
+}
+
+var projectFieldsCmd = &cobra.Command{
+	Use:   "fields <project>",
+	Short: "List the custom fields each of a project's trackers accepts",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		trackerName, _ := cmd.Flags().GetString("tracker")
+		client, err := newClient()
+		if err != nil {
+			return err
+		}
+		project, err := resolveProjectFilter(client, args[0])
+		if err != nil {
+			return err
+		}
+		detail, err := client.GetProjectDetail(project)
+		if err != nil {
+			return err
+		}
+
+		trackers := detail.Trackers
+		if trackerName != "" {
+			id, err := client.ResolveTrackerID(trackerName)
+			if err != nil {
+				return err
+			}
+			trackers = nil
+			for _, t := range detail.Trackers {
+				if t.ID == id {
+					trackers = []redmine.IDName{t}
+				}
+			}
+			if trackers == nil {
+				return fmt.Errorf("project %s does not use tracker %q", detail.Name, trackerName)
+			}
+		}
+
+		result := projectFields{Fields: []projectField{}, UnsampledTrackers: []string{}}
+		byID := map[int]int{}
+		for _, t := range trackers {
+			fields, found, err := client.TrackerCustomFields(project, t.ID)
+			if err != nil {
+				return err
+			}
+			if !found {
+				result.UnsampledTrackers = append(result.UnsampledTrackers, t.Name)
+				continue
+			}
+			for _, f := range fields {
+				i, ok := byID[f.ID]
+				if !ok {
+					i = len(result.Fields)
+					byID[f.ID] = i
+					result.Fields = append(result.Fields, projectField{ID: f.ID, Name: f.Name})
+				}
+				result.Fields[i].Trackers = append(result.Fields[i].Trackers, t.Name)
+			}
+		}
+		sort.Slice(result.Fields, func(i, j int) bool { return result.Fields[i].ID < result.Fields[j].ID })
+
+		if len(result.UnsampledTrackers) > 0 {
+			promptf("No %s issues in %s to read fields from.\n", strings.Join(result.UnsampledTrackers, ", "), detail.Name)
+		}
+		if wantsJSON() {
+			return printJSON(result)
+		}
+		rows := make([][]string, 0, len(result.Fields))
+		for _, f := range result.Fields {
+			rows = append(rows, []string{strconv.Itoa(f.ID), f.Name, strings.Join(f.Trackers, ", ")})
+		}
+		printTable([]string{"ID", "NAME", "TRACKERS"}, rows)
+		return nil
+	},
+}
+
 func init() {
-	projectCmd.AddCommand(projectListCmd, projectViewCmd, projectCategoriesCmd, projectVersionsCmd)
+	projectFieldsCmd.Flags().String("tracker", "", "only this tracker's fields")
+	projectCmd.AddCommand(projectListCmd, projectViewCmd, projectCategoriesCmd, projectVersionsCmd, projectFieldsCmd)
 	rootCmd.AddCommand(projectCmd)
 }
