@@ -127,17 +127,19 @@ out, so a malformed date is an error rather than an empty result.
 
 ## Custom fields
 
-Custom fields differ per Redmine instance (and sometimes per
-project/tracker) and can't be discovered by name — the field-configuration
-API is admin-only. Set them generically by numeric ID:
+Custom fields differ per Redmine instance (and per project/tracker), and
+`--field` takes their numeric ID:
 
 - `--field 12=staging` — repeatable, to set several distinct fields.
 - `--field 11=16 --field 11=27` — repeating the **same** ID instead sets
   that one field to multiple values, for checkbox/multi-select fields
   (Redmine requires an array to set 2+ options).
 
-Find a field's ID by inspecting an existing issue that already has it set:
-`rmine issue view <id> -o json`.
+Find the IDs with `rmine project fields <project>` (`--tracker <name>` for
+one tracker). It lists each field's ID, name and the trackers that carry it,
+read off the newest issue of each tracker, since `/custom_fields.json` is
+admin-only. A tracker with no issue in the project has nothing to read and is
+named on stderr and under `unsampled_trackers` in `-o json`.
 
 **A tracker exposes only some of an instance's custom fields, and Redmine
 does not reject a write naming one outside that set** — it returns 200 and
@@ -188,6 +190,7 @@ Every name-matching flag has a command that enumerates what it accepts, so a
 | `--category` | `rmine project categories <project>` |
 | `--version` | `rmine project versions <project>` |
 | `--activity` | `rmine activity list` |
+| `--field` | `rmine project fields <project>` |
 
 `rmine project view <project>` answers several of these at once: it returns
 the project's trackers, issue categories and enabled modules alongside the
@@ -313,6 +316,7 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine project view <project>` | One project's details, trackers, categories and enabled modules; takes an ID, identifier or display name |
 | `rmine project categories <project>` | List a project's issue categories |
 | `rmine project versions <project>` | List a project's target versions |
+| `rmine project fields <project>` | Custom field IDs and the trackers that carry them; `--tracker` for one tracker |
 | `rmine tracker list` | Trackers defined on this server |
 | `rmine status list` | Issue statuses, and which close an issue |
 | `rmine priority list` | Issue priorities |
