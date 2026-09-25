@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,6 +38,7 @@ var issueListCmd = &cobra.Command{
 		overdue, _ := cmd.Flags().GetBool("overdue")
 		allProjects, _ := cmd.Flags().GetBool("all-projects")
 		version, _ := cmd.Flags().GetString("version")
+		parent, _ := cmd.Flags().GetString("parent")
 		sort, _ := cmd.Flags().GetString("sort")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
@@ -54,7 +56,12 @@ var issueListCmd = &cobra.Command{
 			return err
 		}
 
-		project, err = projectFilterOrDefault(project, allProjects, false)
+		parent, err = resolveIDFilter("--parent", parent)
+		if err != nil {
+			return err
+		}
+
+		project, err = projectFilterOrDefault(project, allProjects, parent != "")
 		if err != nil {
 			return err
 		}
@@ -104,6 +111,7 @@ var issueListCmd = &cobra.Command{
 			DueAfter:      dueAfter,
 			DueBefore:     dueBefore,
 			VersionID:     version,
+			ParentID:      parent,
 			Sort:          sort,
 			Limit:         limit,
 			All:           all,
@@ -326,7 +334,6 @@ var issueCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		project, _ := cmd.Flags().GetString("project")
 		subject, _ := cmd.Flags().GetString("subject")
-		description, _ := cmd.Flags().GetString("description")
 		trackerName, _ := cmd.Flags().GetString("tracker")
 		priorityName, _ := cmd.Flags().GetString("priority")
 		categoryName, _ := cmd.Flags().GetString("category")
@@ -344,6 +351,10 @@ var issueCreateCmd = &cobra.Command{
 			return err
 		}
 		customFields, err := parseCustomFields(fieldArgs)
+		if err != nil {
+			return err
+		}
+		description, err := textFlag(cmd, "description", "description-file")
 		if err != nil {
 			return err
 		}
@@ -374,7 +385,7 @@ var issueCreateCmd = &cobra.Command{
 		req := redmine.CreateIssueRequest{
 			ProjectID:      project,
 			Subject:        subject,
-			Description:    description,
+			Description:    derefString(description),
 			AssignedTo:     assigneeID,
 			ParentID:       parent,
 			StartDate:      startDate,
@@ -468,6 +479,14 @@ var issueUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		description, err := textFlag(cmd, "description", "description-file")
+		if err != nil {
+			return err
+		}
+		notes, err := textFlag(cmd, "notes", "notes-file")
+		if err != nil {
+			return err
+		}
 
 		client, err := newClient()
 		if err != nil {
@@ -493,14 +512,14 @@ var issueUpdateCmd = &cobra.Command{
 		// an update never rewrites a field it was not asked about.
 		req := redmine.UpdateIssueRequest{
 			Subject:        flagString(cmd, "subject"),
-			Description:    flagString(cmd, "description"),
+			Description:    description,
 			ParentID:       flagInt(cmd, "parent"),
 			StartDate:      flagString(cmd, "start-date"),
 			DueDate:        flagString(cmd, "due-date"),
 			EstimatedHours: flagFloat64(cmd, "estimated-hours"),
 			DoneRatio:      flagInt(cmd, "done-ratio"),
 			CustomFields:   customFields,
-			Notes:          flagString(cmd, "notes"),
+			Notes:          notes,
 		}
 		if trackerName != "" {
 			id, err := client.ResolveTrackerID(trackerName)
@@ -632,11 +651,15 @@ var issueCloseCmd = &cobra.Command{
 }
 
 var issueCommentCmd = &cobra.Command{
-	Use:   "comment <id> <note>",
+	Use:   "comment <id> [note]",
 	Short: "Add a comment to an issue",
-	Args:  cobra.ExactArgs(2),
+	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := parseIssueID(args[0])
+		if err != nil {
+			return err
+		}
+		note, err := commentNote(cmd, args)
 		if err != nil {
 			return err
 		}
@@ -649,11 +672,34 @@ var issueCommentCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := client.AddNote(id, args[1], uploads); err != nil {
+		if err := client.AddNote(id, note, uploads); err != nil {
 			return err
 		}
 		return printAction(fmt.Sprintf("Commented on issue #%d", id), actionResult{Status: "commented", Issue: id})
 	},
+}
+
+// commentNote returns the note given as the second argument or read from
+// --file. An empty file is an error, since Redmine drops a blank note without
+// recording anything.
+func commentNote(cmd *cobra.Command, args []string) (string, error) {
+	path, _ := cmd.Flags().GetString("file")
+	switch {
+	case cmd.Flags().Changed("file") && len(args) == 2:
+		return "", fmt.Errorf("pass the note as an argument or with --file, not both")
+	case len(args) == 2:
+		return args[1], nil
+	case !cmd.Flags().Changed("file"):
+		return "", fmt.Errorf("a note is required, as an argument or with --file")
+	}
+	note, err := readTextFile("--file", path)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(note) == "" {
+		return "", fmt.Errorf("--file: %s is empty", path)
+	}
+	return note, nil
 }
 
 var issueRelationsCmd = &cobra.Command{
@@ -784,6 +830,7 @@ func init() {
 	issueListCmd.Flags().Bool("due-next-week", false, "only issues due next week (Mon-Sun)")
 	issueListCmd.Flags().Bool("overdue", false, "only issues whose due date has already passed")
 	issueListCmd.Flags().String("version", "", "filter by target version name or ID (\"*\" for any, \"!*\" for none); a name needs --project")
+	issueListCmd.Flags().String("parent", "", "only direct subtasks of this issue ID (searches every project unless --project is given)")
 	issueListCmd.Flags().String("sort", "", "sort order, e.g. due_date or \"priority:desc,due_date:asc\"")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
@@ -791,34 +838,40 @@ func init() {
 	issueCreateCmd.Flags().String("project", "", "project ID, identifier, or name (required unless the profile has a default project)")
 	issueCreateCmd.Flags().String("subject", "", "issue subject (required)")
 	issueCreateCmd.Flags().String("description", "", "issue description")
+	issueCreateCmd.Flags().String("description-file", "", "read the issue description from a file, or from stdin with -")
+	issueCreateCmd.MarkFlagsMutuallyExclusive("description", "description-file")
 	issueCreateCmd.Flags().String("tracker", "", "tracker name, e.g. Bug")
 	issueCreateCmd.Flags().String("priority", "", "priority name, e.g. High")
-	issueCreateCmd.Flags().String("category", "", "issue category name (project-specific; see `rmine project categories <project>`)")
+	issueCreateCmd.Flags().String("category", "", "issue category `name` (project-specific; see rmine project categories <project>)")
 	issueCreateCmd.Flags().String("assignee", "", "assignee: user ID, \"me\", or a name matched within the project")
 	issueCreateCmd.Flags().Int("parent", 0, "parent issue ID")
 	issueCreateCmd.Flags().String("start-date", "", "start date (YYYY-MM-DD)")
 	issueCreateCmd.Flags().String("due-date", "", "due date (YYYY-MM-DD)")
 	issueCreateCmd.Flags().Float64("estimated-hours", 0, "estimated hours")
 	issueCreateCmd.Flags().Int("done-ratio", 0, "percent complete (0-100)")
-	issueCreateCmd.Flags().String("version", "", "target version name or ID (see `rmine project versions <project>`)")
+	issueCreateCmd.Flags().String("version", "", "target version `name` or ID (see rmine project versions <project>)")
 	issueCreateCmd.Flags().StringArray("attach", nil, "attach a local file (repeatable)")
-	issueCreateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable); find IDs via `rmine issue view <id> -o json` on an existing issue")
+	issueCreateCmd.Flags().StringArray("field", nil, "custom field as `id=value` (repeatable); find IDs via rmine project fields <project>")
 	_ = issueCreateCmd.MarkFlagRequired("subject")
 
 	issueUpdateCmd.Flags().String("subject", "", "new subject")
 	issueUpdateCmd.Flags().String("description", "", "new description")
+	issueUpdateCmd.Flags().String("description-file", "", "read the new description from a file, or from stdin with -")
+	issueUpdateCmd.MarkFlagsMutuallyExclusive("description", "description-file")
 	issueUpdateCmd.Flags().String("tracker", "", "new tracker name")
 	issueUpdateCmd.Flags().String("priority", "", "new priority name")
 	issueUpdateCmd.Flags().String("status", "", "new status name")
-	issueUpdateCmd.Flags().String("category", "", "new category name, or \"\" to clear (project-specific; see `rmine project categories <project>`)")
+	issueUpdateCmd.Flags().String("category", "", "new category `name`, or \"\" to clear (project-specific; see rmine project categories <project>)")
 	issueUpdateCmd.Flags().String("assignee", "", "new assignee: user ID, \"me\", or a name matched within the issue's project (0 unassigns)")
 	issueUpdateCmd.Flags().Int("parent", 0, "new parent issue ID (0 detaches from the parent)")
 	issueUpdateCmd.Flags().String("start-date", "", "new start date (YYYY-MM-DD)")
 	issueUpdateCmd.Flags().String("due-date", "", "new due date (YYYY-MM-DD)")
 	issueUpdateCmd.Flags().Float64("estimated-hours", 0, "new estimated hours (0 clears the estimate)")
 	issueUpdateCmd.Flags().Int("done-ratio", 0, "new percent complete (0-100)")
-	issueUpdateCmd.Flags().String("version", "", "new target version name or ID, or \"\" to clear (see `rmine project versions <project>`)")
+	issueUpdateCmd.Flags().String("version", "", "new target version `name` or ID, or \"\" to clear (see rmine project versions <project>)")
 	issueUpdateCmd.Flags().String("notes", "", "journal comment recorded alongside this change")
+	issueUpdateCmd.Flags().String("notes-file", "", "read the journal comment from a file, or from stdin with -")
+	issueUpdateCmd.MarkFlagsMutuallyExclusive("notes", "notes-file")
 	issueUpdateCmd.Flags().StringArray("attach", nil, "attach a local file (repeatable)")
 	issueUpdateCmd.Flags().StringArray("field", nil, "custom field as id=value (repeatable)")
 
@@ -829,6 +882,7 @@ func init() {
 	issueAttachmentsCmd.Flags().String("download", "", "download every attachment into this directory")
 
 	issueCommentCmd.Flags().StringArray("attach", nil, "attach a local file (repeatable)")
+	issueCommentCmd.Flags().String("file", "", "read the note from a file, or from stdin with -")
 
 	issueRelateCmd.Flags().Int("delay", 0, "days between the two issues (precedes/follows only)")
 	issueUnrelateCmd.Flags().BoolP("force", "y", false, "skip the confirmation prompt")
@@ -851,6 +905,42 @@ func flagString(cmd *cobra.Command, name string) *string {
 	}
 	v, _ := cmd.Flags().GetString(name)
 	return &v
+}
+
+// textFlag returns the text given by the inline flag, or read from the file
+// named by fileFlag, or nil when neither was passed.
+func textFlag(cmd *cobra.Command, inline, fileFlag string) (*string, error) {
+	if !cmd.Flags().Changed(fileFlag) {
+		return flagString(cmd, inline), nil
+	}
+	path, _ := cmd.Flags().GetString(fileFlag)
+	text, err := readTextFile("--"+fileFlag, path)
+	if err != nil {
+		return nil, err
+	}
+	return &text, nil
+}
+
+// readTextFile reads the file at path, or stdin when path is "-".
+func readTextFile(flag, path string) (string, error) {
+	var b []byte
+	var err error
+	if path == "-" {
+		b, err = io.ReadAll(os.Stdin)
+	} else {
+		b, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", flag, err)
+	}
+	return string(b), nil
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func flagInt(cmd *cobra.Command, name string) *int {

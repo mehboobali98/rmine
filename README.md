@@ -48,7 +48,7 @@ rmine issue update 1234 --status "In Progress" --assignee 42
 rmine issue list --project "AssetSonar Scrum Team" --status "in progress" --due-next-week
 ```
 
-`--project`, `--status`, `--tracker` and `--category` match names case-insensitively (`in progress` finds `In Progress`), so you don't need exact server casing. `--due-within N`, `--due-next-week` and `--overdue` compute the date range for you; `--due-after`/`--due-before` take explicit `YYYY-MM-DD` dates if you need a custom range.
+`--project`, `--status`, `--tracker` and `--category` match names case-insensitively (`in progress` finds `In Progress`), so you don't need exact server casing. Tracker, status, priority, activity, category and version names also fall back to ignoring whitespace, hyphens and underscores, so `Sub-task` finds `SubTask` and `Internal` finds a category saved as `Internal ` with a trailing space. `--due-within N`, `--due-next-week` and `--overdue` compute the date range for you; `--due-after`/`--due-before` take explicit `YYYY-MM-DD` dates if you need a custom range.
 
 ```sh
 rmine issue create --project "X" --subject "Ship it" --version "Sprint 42" --attach ./spec.pdf
@@ -85,17 +85,18 @@ Because that scoping comes from stored configuration rather than from the comman
 | `rmine project view <project>` | Show one project's details, plus its trackers, categories and enabled modules |
 | `rmine project categories <project>` | List a project's issue categories |
 | `rmine project versions <project>` | List a project's target versions |
+| `rmine project fields <project>` | List custom field IDs and the trackers that carry them (`--tracker` for one tracker) |
 | `rmine tracker list` | List the trackers defined on this server |
 | `rmine status list` | List the issue statuses, and which of them close an issue |
 | `rmine priority list` | List the issue priorities |
 | `rmine activity list` | List the time-entry activities |
-| `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects`) |
+| `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--parent`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects`) |
 | `rmine issue view <id>` | Show issue details, its web link, attachments, subtasks and relations (`--comments` to also fetch comments) |
 | `rmine issue attachments <id>` | List an issue's attachments (`--download <dir>` to save them all) |
-| `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach`) |
-| `rmine issue update <id>` | Edit an issue (same optional flags as create, plus `--status` and `--notes`) |
+| `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description` or `--description-file`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach`) |
+| `rmine issue update <id>` | Edit an issue (same optional flags as create, plus `--status` and `--notes` or `--notes-file`) |
 | `rmine issue close <id>` | Close an issue (`--status` to pick a specific closed status) |
-| `rmine issue comment <id> <note>` | Add a comment (`--attach` to include files) |
+| `rmine issue comment <id> [note]` | Add a comment (`--file` to read it from a file or stdin, `--attach` to include files) |
 | `rmine issue relations <id>` | List an issue's links to other issues |
 | `rmine issue relate <id> <type> <other-id>` | Link two issues, e.g. `relate 100 precedes 200` (`--delay` for precedes/follows) |
 | `rmine issue unrelate <relation-id>` | Remove a link (prompts unless `-y`/`--force`) |
@@ -130,7 +131,7 @@ For unattended setup, `$RMINE_URL` and `$RMINE_API_KEY` supply the two values `r
 
 Assignees can be given as a numeric Redmine user ID, the literal `me`, or a person's name. Names are resolved against the project's member list — `/users.json` is admin-only on most instances, while a project's memberships are readable by its members — so a name needs a project in scope: `--project` on `issue list`, and the issue's own project on `issue update`. An exact name wins; failing that a single substring match is accepted, so `--assignee jane` finds Jane Doe. A name matching several members is an error listing them rather than a guess, since assigning work to the wrong person isn't something the caller can detect. If your API key can't read a project's member list, pass a numeric ID.
 
-Custom fields differ per Redmine instance (and sometimes per project/tracker), so they're set generically by numeric ID: `--field 12=staging`, repeatable to set several distinct fields. Passing the same ID more than once (`--field 11=16 --field 11=27`) instead sets that one field to multiple values, for checkbox/multi-select fields. Find a field's ID by inspecting an existing issue that has it set: `rmine issue view <id> -o json`.
+Custom fields differ per Redmine instance (and sometimes per project/tracker), so they're set generically by numeric ID: `--field 12=staging`, repeatable to set several distinct fields. Passing the same ID more than once (`--field 11=16 --field 11=27`) instead sets that one field to multiple values, for checkbox/multi-select fields. Find a field's ID, and which trackers carry it, with `rmine project fields <project>` (`--tracker <name>` to narrow it). `/custom_fields.json` is admin-only, so this reads the fields off the newest issue of each tracker; a tracker with no issues in the project is named on stderr and under `unsampled_trackers` in `-o json`.
 
 `--category` and `--version` are project-specific and matched case-insensitively by name; list a project's valid values with `rmine project categories <project>` and `rmine project versions <project>`. `--tracker`, `--status`, `--priority` and `--activity` are server-wide — `rmine tracker list`, `rmine status list`, `rmine priority list` and `rmine activity list` enumerate them. A name that matches nothing is rejected with the valid spellings listed, so a wrong guess tells you the right answer.
 
@@ -141,6 +142,8 @@ Files are attached with `--attach <path>`, repeatable, on `issue create`, `issue
 Issues are linked with `rmine issue relate <id> <type> <other-id>`, where the type reads left to right — `relate 100 precedes 200` records that #100 precedes #200. Valid types are `relates`, `blocks`, `blocked`, `precedes`, `follows`, `duplicates`, `duplicated`, `copied_to` and `copied_from`; `--delay <days>` applies to `precedes`/`follows` only. `rmine issue relations <id>` lists an issue's links from that issue's point of view (so the other end of a `precedes` correctly reads as `follows`), and `rmine issue unrelate <relation-id>` removes one.
 
 On `issue update`, a flag you don't pass is left alone on the server, and passing an empty one clears the field: `--assignee 0` unassigns, `--parent 0` detaches from the parent, `--category ""` removes the category, `--estimated-hours 0` drops the estimate, and `--description ""` empties the description. `--done-ratio 0` is a real value — 0% — not a clear.
+
+For a long description, pass `--description-file <path>` (or `-` for stdin) instead of `--description` on `issue create` or `issue update`, rather than quoting the body through the shell. Comments work the same way: `--notes-file` on `issue update`, and `issue comment <id> --file <path>` in place of the note argument.
 
 Different Redmine instances (and different projects/trackers within one) can require different mandatory fields — including custom fields. There's no reliable way to know these ahead of time (the field-configuration API is admin-only), so `rmine` just relies on Redmine's own validation: a `create`/`update` that's missing a required field returns the server's exact error (e.g. `redmine returned 422: Category cannot be blank`), naming what's missing so you can retry with it set.
 
