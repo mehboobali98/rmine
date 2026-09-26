@@ -110,6 +110,8 @@ Because that scoping comes from stored configuration rather than from the comman
 
 Every command accepts `-o`/`--output json` and `--profile <name>` to target a specific server for that one call.
 
+Every write (`issue create`, `update`, `close`, `comment`, `relate`, `unrelate`, and `time log`, `edit`, `delete`) also takes `--dry-run`. It resolves names as a real run would, then prints the requests it would send (method, path and JSON body, plus any file uploads) instead of sending them, and never prompts. A dry run can't catch a rejection only the server knows about, such as a missing required field.
+
 ## Scripting
 
 `issue view` and `issue list -o json` both carry a `url` field with the issue's address in the Redmine web UI, so a script or an assistant reporting a result can hand over a link rather than a bare number.
