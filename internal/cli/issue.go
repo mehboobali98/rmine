@@ -39,6 +39,7 @@ var issueListCmd = &cobra.Command{
 		allProjects, _ := cmd.Flags().GetBool("all-projects")
 		version, _ := cmd.Flags().GetString("version")
 		parent, _ := cmd.Flags().GetString("parent")
+		fieldArgs, _ := cmd.Flags().GetStringArray("field")
 		sort, _ := cmd.Flags().GetString("sort")
 		limit, _ := cmd.Flags().GetInt("limit")
 		all, _ := cmd.Flags().GetBool("all")
@@ -57,6 +58,10 @@ var issueListCmd = &cobra.Command{
 		}
 
 		parent, err = resolveIDFilter("--parent", parent)
+		if err != nil {
+			return err
+		}
+		fieldFilters, err := parseFieldFilters(fieldArgs)
 		if err != nil {
 			return err
 		}
@@ -112,6 +117,7 @@ var issueListCmd = &cobra.Command{
 			DueBefore:     dueBefore,
 			VersionID:     version,
 			ParentID:      parent,
+			CustomFields:  fieldFilters,
 			Sort:          sort,
 			Limit:         limit,
 			All:           all,
@@ -831,6 +837,7 @@ func init() {
 	issueListCmd.Flags().Bool("overdue", false, "only issues whose due date has already passed")
 	issueListCmd.Flags().String("version", "", "filter by target version name or ID (\"*\" for any, \"!*\" for none); a name needs --project")
 	issueListCmd.Flags().String("parent", "", "only direct subtasks of this issue ID (searches every project unless --project is given)")
+	issueListCmd.Flags().StringArray("field", nil, "only issues whose custom field matches, as `id=value` (repeatable; repeat an id to match any of several values; * for any value, !* for applicable but unset)")
 	issueListCmd.Flags().String("sort", "", "sort order, e.g. due_date or \"priority:desc,due_date:asc\"")
 	issueListCmd.Flags().Int("limit", 25, "maximum number of issues to return")
 	issueListCmd.Flags().Bool("all", false, "fetch every matching issue, ignoring --limit")
@@ -1236,6 +1243,32 @@ func parseCustomFields(raw []string) ([]redmine.CustomField, error) {
 		}
 	}
 	return fields, nil
+}
+
+// parseFieldFilters turns repeated --field id=value flags on issue list into
+// custom field filters, grouping values that share an ID.
+func parseFieldFilters(raw []string) ([]redmine.CustomFieldFilter, error) {
+	fields, err := parseCustomFields(raw)
+	if err != nil {
+		return nil, err
+	}
+	filters := make([]redmine.CustomFieldFilter, 0, len(fields))
+	for _, f := range fields {
+		values := f.Values
+		if values == nil {
+			values = []string{string(f.Value)}
+		}
+		for _, v := range values {
+			if v == "" {
+				return nil, fmt.Errorf("--field %d: empty value; use %d=!* for issues where it is unset", f.ID, f.ID)
+			}
+			if (v == "*" || v == "!*") && len(values) > 1 {
+				return nil, fmt.Errorf("--field %d: %s cannot be combined with other values", f.ID, v)
+			}
+		}
+		filters = append(filters, redmine.CustomFieldFilter{ID: f.ID, Values: values})
+	}
+	return filters, nil
 }
 
 // resolveDueDateRange combines the raw --due-after/--due-before dates with

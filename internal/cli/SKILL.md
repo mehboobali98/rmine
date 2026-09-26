@@ -80,6 +80,7 @@ duplicate ticket.
 - "put ticket 1234 in the next sprint" → `rmine issue update 1234 --version "Sprint 42"`
 - "what's in Sprint 42" → `rmine issue list --project "X" --version "Sprint 42"`
 - "open subtasks of 1234" → `rmine issue list --parent 1234 --status open`
+- "open bugs for the EZO team" → `rmine issue list --project "X" --tracker Bug --status open --field 33=EZO` (field ID from `rmine project fields`)
 - "1234 has to ship before 1235" → `rmine issue relate 1234 precedes 1235`
 - "what are 1234's subtasks" → `rmine issue view 1234 -o json` (read `children`)
 
@@ -134,6 +135,14 @@ Custom fields differ per Redmine instance (and per project/tracker), and
 - `--field 11=16 --field 11=27` — repeating the **same** ID instead sets
   that one field to multiple values, for checkbox/multi-select fields
   (Redmine requires an array to set 2+ options).
+
+On `issue list`, `--field id=value` filters instead: repeat an ID to match
+any of several values (`--field 33=EZO --field 33=EZR`), and use `*` for
+"any value" or `!*` for "not set". Every form, `!*` included, only matches
+issues whose tracker has the field: `!*` means "the field applies and was
+left empty", so it never counts issues on a tracker without it. The value is
+compared as Redmine stores it, so copy it from an issue's `custom_fields` in
+`-o json` — a user field holds a user ID, a boolean `1` or `0`.
 
 Find the IDs with `rmine project fields <project>` (`--tracker <name>` for
 one tracker). It lists each field's ID, name and the trackers that carry it,
@@ -323,7 +332,7 @@ across matched entries. `rmine time edit <id>` / `rmine time delete <id>`
 | `rmine status list` | Issue statuses, and which close an issue |
 | `rmine priority list` | Issue priorities |
 | `rmine activity list` | Time-entry activities |
-| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--parent`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects` |
+| `rmine issue list` | `--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--parent`, `--field`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects` |
 | `rmine issue view <id>` | Full issue detail, custom fields, web `url`, attachments, `children` and `relations`; `--comments` to also fetch comments |
 | `rmine issue attachments <id>` | List attachments; `--download <dir>` saves them all |
 | `rmine issue create` | `--project`, `--subject` required; `--description` or `--description-file`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach` |

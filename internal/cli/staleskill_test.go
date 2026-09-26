@@ -71,11 +71,13 @@ func TestNoWarningForAHandWrittenSkill(t *testing.T) {
 	}
 }
 
-func TestNoWarningFromAnUnversionedBuild(t *testing.T) {
-	withSkillFile(t, "dev", stampedBy("v0.5.1"))
+func TestNoWarningFromADevelopmentBuild(t *testing.T) {
+	for _, running := range []string{"dev", "v0.7.1+dirty"} {
+		withSkillFile(t, running, stampedBy("v0.5.1"))
 
-	if _, stderr, _ := runCLIErr(t, "version"); stderr != "" {
-		t.Errorf("expected no warning, got %q", stderr)
+		if _, stderr, _ := runCLIErr(t, "version"); stderr != "" {
+			t.Errorf("%s: expected no warning, got %q", running, stderr)
+		}
 	}
 }
 
