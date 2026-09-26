@@ -51,6 +51,11 @@ func (c *Client) UploadFile(path string) (*Upload, error) {
 	name := filepath.Base(path)
 	query := url.Values{"filename": {name}}
 
+	if c.dryRun {
+		c.planned = append(c.planned, PlannedRequest{Method: "POST", Path: "/uploads.json?" + query.Encode(), File: path})
+		return &Upload{Token: DryRunUploadToken, Filename: name, ContentType: contentTypeFor(name)}, nil
+	}
+
 	var resp uploadResponse
 	if err := c.doRaw("POST", "/uploads.json", query, "application/octet-stream", f, &resp); err != nil {
 		return nil, fmt.Errorf("uploading %s: %w", name, err)

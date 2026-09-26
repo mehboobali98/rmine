@@ -99,7 +99,7 @@ func runCLIErr(t *testing.T, args ...string) (stdout, stderr string, err error) 
 	prevArgs := invocationArgs
 	invocationArgs = args
 	rootCmd.SetArgs(args)
-	execErr := rootCmd.Execute()
+	execErr := finishDryRun(rootCmd.Execute())
 	if execErr != nil {
 		reportError(execErr)
 	}
