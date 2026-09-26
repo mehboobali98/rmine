@@ -46,7 +46,7 @@ var invocationArgs []string
 // Execute runs the CLI; it's the sole entrypoint called from main.
 func Execute() {
 	invocationArgs = os.Args[1:]
-	if err := rootCmd.Execute(); err != nil {
+	if err := finishDryRun(rootCmd.Execute()); err != nil {
 		reportError(err)
 		os.Exit(1)
 	}
@@ -109,7 +109,9 @@ func newClient() (*redmine.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return redmine.New(profile.URL, profile.APIKey), nil
+	client := redmine.New(profile.URL, profile.APIKey)
+	client.SetDryRun(dryRunFlag)
+	return client, nil
 }
 
 // projectOrDefault supplies the active profile's default project when a

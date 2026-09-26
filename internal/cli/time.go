@@ -281,8 +281,12 @@ func init() {
 }
 
 // confirm asks a yes/no question on stdin. defaultYes controls what
-// pressing enter with no answer means.
+// pressing enter with no answer means. A dry run deletes nothing, so it
+// answers yes without asking.
 func confirm(prompt string, defaultYes bool) bool {
+	if dryRunFlag {
+		return true
+	}
 	hint := "[y/N]"
 	if defaultYes {
 		hint = "[Y/n]"
