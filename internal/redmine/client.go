@@ -31,6 +31,8 @@ type Client struct {
 	apiKey   string
 	http     *http.Client
 	download *http.Client
+	dryRun   bool
+	planned  []PlannedRequest
 }
 
 // New builds a Client for the given Redmine base URL and API key.
@@ -69,6 +71,9 @@ type errorBody struct {
 }
 
 func (c *Client) do(method, path string, query url.Values, body, out any) error {
+	if c.dryRun && method != http.MethodGet {
+		return c.planWrite(method, path, body)
+	}
 	var reqBody io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
