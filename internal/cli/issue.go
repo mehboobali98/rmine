@@ -236,11 +236,18 @@ var issueViewCmd = &cobra.Command{
 				fmt.Printf("  [%d] %s\n", r.ID, describeRelation(issue.ID, r))
 			}
 		}
+		names := loadDetailNames(client, issue)
 		for _, j := range issue.Journals {
-			if j.Notes == "" {
-				continue // a bare field change, not a comment
+			if j.Notes == "" && len(j.Details) == 0 {
+				continue
 			}
-			fmt.Printf("\n--- %s, %s ---\n%s\n", j.User.Name, j.CreatedOn.Format("2006-01-02 15:04"), j.Notes)
+			fmt.Printf("\n--- %s, %s ---\n", j.User.Name, j.CreatedOn.Format("2006-01-02 15:04"))
+			for _, d := range j.Details {
+				fmt.Printf("  %s\n", describeDetail(d, names))
+			}
+			if j.Notes != "" {
+				fmt.Println(j.Notes)
+			}
 		}
 		return nil
 	},

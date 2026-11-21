@@ -91,7 +91,7 @@ Because that scoping comes from stored configuration rather than from the comman
 | `rmine priority list` | List the issue priorities |
 | `rmine activity list` | List the time-entry activities |
 | `rmine issue list` | List issues (`--project`, `--status`, `--assignee`, `--tracker`, `--version`, `--parent`, `--field`, `--subject`, `--updated-after`, `--updated-before`, `--due-after`, `--due-before`, `--due-within`, `--due-next-week`, `--overdue`, `--sort`, `--limit`, `--all`, `--all-projects`) |
-| `rmine issue view <id>` | Show issue details, its web link, attachments, subtasks and relations (`--comments` to also fetch comments) |
+| `rmine issue view <id>` | Show issue details, its web link, attachments, subtasks and relations (`--comments` to also fetch comments and field changes) |
 | `rmine issue attachments <id>` | List an issue's attachments (`--download <dir>` to save them all) |
 | `rmine issue create` | Create an issue (`--project`, `--subject` required; `--description` or `--description-file`, `--tracker`, `--priority`, `--category`, `--assignee`, `--parent`, `--version`, `--start-date`, `--due-date`, `--estimated-hours`, `--done-ratio`, `--field`, `--attach`) |
 | `rmine issue update <id>` | Edit an issue (same optional flags as create, plus `--status` and `--notes` or `--notes-file`) |

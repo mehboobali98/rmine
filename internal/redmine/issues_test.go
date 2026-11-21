@@ -337,6 +337,48 @@ func TestGetIssueParsesMultiValueCustomFields(t *testing.T) {
 	}
 }
 
+// Redmine sends each journal's field changes under "details"; without them a
+// field-only journal decodes to an empty entry.
+func TestGetIssueDecodesJournalDetails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"issue": {"id": 1, "journals": [{
+			"id": 10, "user": {"id": 2, "name": "Ann"}, "notes": "",
+			"created_on": "2026-01-05T10:00:00Z",
+			"details": [
+				{"property": "attr", "name": "status_id", "old_value": "3", "new_value": "5"},
+				{"property": "cf", "name": "7", "old_value": null, "new_value": "Yes"}
+			]}]}}`))
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, "test-key")
+	issue, err := client.GetIssue(1, GetIssueOptions{Comments: true})
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	if len(issue.Journals) != 1 {
+		t.Fatalf("got %d journals, want 1", len(issue.Journals))
+	}
+	details := issue.Journals[0].Details
+	if len(details) != 2 {
+		t.Fatalf("got %d details, want 2: %+v", len(details), details)
+	}
+	status := details[0]
+	if status.Property != "attr" || status.Name != "status_id" {
+		t.Errorf("first detail = %+v, want attr status_id", status)
+	}
+	if status.NewValue == nil || *status.NewValue != "5" {
+		t.Errorf("first detail new_value = %v, want 5", status.NewValue)
+	}
+	// null means the field had no value, which is not the same as "".
+	if details[1].OldValue != nil {
+		t.Errorf("second detail old_value = %q, want nil", *details[1].OldValue)
+	}
+	if details[1].NewValue == nil || *details[1].NewValue != "Yes" {
+		t.Errorf("second detail new_value = %v, want Yes", details[1].NewValue)
+	}
+}
+
 func atoiOrZero(s string) int {
 	n := 0
 	for _, c := range s {
