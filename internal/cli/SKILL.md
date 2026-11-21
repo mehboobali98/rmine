@@ -305,8 +305,9 @@ dwarfs the issue itself — so pass `--comments` when you need them. In `-o json
 they land under `attachments` and `journals`. Each journal has its comment in
 `notes` (often empty) and its field changes in `details`, as Redmine sends them:
 `property` (`attr` for a built-in field, `cf` for a custom field), `name` (such
-as `status_id`, or the custom field's id), `old_value` and `new_value` (`null`
-when the field had no value). The journal's `created_on` is when the change
+as `status_id`, or the custom field's id), `old_value` and `new_value` (`null` or
+`""` when the field had no value; treat both as empty). A journal with no field
+changes has no `details` key. The journal's `created_on` is when the change
 happened, so a status history is every `status_id` detail in journal order. The
 table view prints each journal's changes above its notes, with status, tracker
 and priority ids resolved to names.

@@ -87,8 +87,8 @@ type Journal struct {
 // Property is "attr" for a built-in field (Name is its key, such as
 // "status_id"), "cf" for a custom field (Name is the field's ID), or another
 // kind such as "attachment" or "relation". Values are strings, and IDs for
-// fields that reference other records. A nil value means the field had none,
-// which Redmine reports as null rather than "".
+// fields that reference other records. Redmine reports a field with no value
+// as null or as "", depending on the field; the pointers keep the two apart.
 type JournalDetail struct {
 	Property string  `json:"property"`
 	Name     string  `json:"name"`

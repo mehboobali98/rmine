@@ -140,6 +140,34 @@ func TestIssueViewPrintsFieldChanges(t *testing.T) {
 	}
 }
 
+func TestIssueViewNamesTrackerAndPriorityChanges(t *testing.T) {
+	listOf := func(key string, items ...map[string]any) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(map[string]any{key: items})
+		}
+	}
+	srv := journalServer(t, []map[string]any{
+		journal(10, "Ann", "", "2026-01-05T10:00:00Z",
+			detail("attr", "tracker_id", "1", "2"),
+			detail("attr", "priority_id", "1", "2")),
+	}, map[string]http.HandlerFunc{
+		"/trackers.json": listOf("trackers",
+			map[string]any{"id": 1, "name": "Bug"}, map[string]any{"id": 2, "name": "Task"}),
+		"/enumerations/issue_priorities.json": listOf("issue_priorities",
+			map[string]any{"id": 1, "name": "Low"}, map[string]any{"id": 2, "name": "High"}),
+	})
+	defer srv.Close()
+	setupTestProfile(t, srv)
+
+	out := runCLI(t, "issue", "view", "1234", "--comments")
+
+	for _, want := range []string{"Tracker: Bug -> Task", "Priority: Low -> High"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("issue view output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestIssueViewSkipsStatusLookupWithoutStatusChanges(t *testing.T) {
 	// No status, tracker or priority routes: journalServer fails the test if
 	// any of them is requested.
