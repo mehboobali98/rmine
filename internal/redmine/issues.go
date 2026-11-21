@@ -73,13 +73,27 @@ type Attachment struct {
 }
 
 // Journal is one entry in an issue's history. Redmine records field changes
-// and comments in the same list, so an entry with empty Notes is a bare field
-// change with nothing a reader would call a comment.
+// and comments in the same list: Details holds the changes, Notes the
+// comment, and either can be empty.
 type Journal struct {
-	ID        int       `json:"id"`
-	User      IDName    `json:"user"`
-	Notes     string    `json:"notes"`
-	CreatedOn time.Time `json:"created_on"`
+	ID        int             `json:"id"`
+	User      IDName          `json:"user"`
+	Notes     string          `json:"notes"`
+	CreatedOn time.Time       `json:"created_on"`
+	Details   []JournalDetail `json:"details,omitempty"`
+}
+
+// JournalDetail is one field change in a journal, exactly as Redmine sends it.
+// Property is "attr" for a built-in field (Name is its key, such as
+// "status_id"), "cf" for a custom field (Name is the field's ID), or another
+// kind such as "attachment" or "relation". Values are strings, and IDs for
+// fields that reference other records. Redmine reports a field with no value
+// as null or as "", depending on the field; the pointers keep the two apart.
+type JournalDetail struct {
+	Property string  `json:"property"`
+	Name     string  `json:"name"`
+	OldValue *string `json:"old_value"`
+	NewValue *string `json:"new_value"`
 }
 
 // CustomField is one value of an issue's custom fields, which are defined

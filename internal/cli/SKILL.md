@@ -302,8 +302,15 @@ usual fields — quote that link when reporting an issue to a person, rather
 than the bare number. `issue list -o json` carries `url` per issue too, and always carries its
 **attachments** (id, filename, content type, size). **Comments** are extra — a long issue's history
 dwarfs the issue itself — so pass `--comments` when you need them. In `-o json`
-they land under `attachments` and `journals`; a journal with empty `notes` is a
-bare field change, not a comment, and is worth skipping.
+they land under `attachments` and `journals`. Each journal has its comment in
+`notes` (often empty) and its field changes in `details`, as Redmine sends them:
+`property` (`attr` for a built-in field, `cf` for a custom field), `name` (such
+as `status_id`, or the custom field's id), `old_value` and `new_value` (`null` or
+`""` when the field had no value; treat both as empty). A journal with no field
+changes has no `details` key. The journal's `created_on` is when the change
+happened, so a status history is every `status_id` detail in journal order. The
+table view prints each journal's changes above its notes, with status, tracker
+and priority ids resolved to names.
 
 `issue view` also returns the issue's **`children`** (the subtask tree, nested,
 each with `id`, `tracker` and `subject`) and its **`relations`**. Verifying that
